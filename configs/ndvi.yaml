@@ -1,0 +1,18 @@
+# NDVI subsystem settings.
+# These values are deep-merged over the `ndvi` section of default.yaml.
+
+# mode: proxy | model | auto
+#   proxy -> always use the labeled RGB greenness proxy
+#   model -> require trained weights; error if missing
+#   auto  -> use trained model weights if they exist, otherwise fall back to proxy
+mode: proxy
+
+# Regression model type, resolved through the model registry.
+model: xgboost
+
+model_path: models/ndvi/ndvi_xgb.json
+
+proxy:
+  # exg -> Excess Green (2G - R - B)
+  # green_ratio -> G / (R + G + B)
+  method: exg

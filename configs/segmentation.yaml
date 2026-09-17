@@ -1,0 +1,17 @@
+# Segmentation model settings.
+# These values are deep-merged over the `segmentation` section of default.yaml.
+
+model_path: models/segmentation/yolo11n-seg.pt
+confidence_threshold: 0.25
+image_size: 640
+device: null
+
+# Class IDs considered relevant ("leaf"). For a pretrained COCO checkpoint,
+# class 58 is "potted plant" and is used for the initial feasibility experiment.
+# After fine-tuning a leaf-specific one-class model (0 = leaf), set:
+#   classes: [0]
+classes:
+  - 58
+
+# Raise an error when fewer than this many leaf pixels are segmented.
+min_leaf_pixels: 10

@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "plantvision"
+version = "0.1.0"
+description = "RGB image -> leaf segmentation -> RGB features -> NDVI estimate (MVP)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = [
+  "numpy>=1.23",
+  "Pillow>=9.4",
+  "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+ml = [
+  "ultralytics>=8.3",
+  "torch>=2.0",
+  "pandas>=2.0",
+  "scikit-learn>=1.2",
+  "xgboost>=2.0",
+]
+dev = [
+  "pytest>=7.0",
+]
+
+[project.scripts]
+plantvision = "plantvision.cli.commands:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

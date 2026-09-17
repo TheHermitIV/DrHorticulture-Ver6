@@ -1,0 +1,23 @@
+segmentation:
+  model_path: models/segmentation/yolo26s-seg.pt
+  confidence_threshold: 0.25
+  image_size: 640
+  device: null
+  classes:
+    - 58
+  min_leaf_pixels: 10
+
+features:
+  include:
+    - mean_r
+    - mean_g
+    - mean_b
+    - median_r
+    - median_g
+    - median_b
+    - green_ratio
+    - exg
+    - r_g_ratio
+    - g_b_ratio
+    - r_b_ratio
+    - leaf_coverage
