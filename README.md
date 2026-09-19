@@ -70,3 +70,8 @@ pytest
 - Fine-tuned leaf detection (so any individual leaf works)
 
 For the detailed technical design, see `ARCHITECTURE.md`.
+
+DEMO 9/18/2026
+
+https://github.com/user-attachments/assets/7efc562c-531c-45d1-a218-bdd98f850586
+
