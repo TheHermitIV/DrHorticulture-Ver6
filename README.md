@@ -1,7 +1,7 @@
 # PlantVision
 
-Takes a photo of a potted plant, finds the leaves, looks at their color, and
-gives you an NDVI-style "is this plant healthy" score.
+Takes a photo of a potted plant, finds the leaves, looks at their color,
+gives them a greenness score, and predicts the plant species.
 
 ## How it works
 
@@ -10,32 +10,44 @@ gives you an NDVI-style "is this plant healthy" score.
 2. A computer-vision model finds the leaf area in the photo
 3. It measures the leaves' color (red, green, blue balance)
 4. It turns that into a greenness score
-5. It saves the score + a few images you can look at
+5. It predicts the plant species from the photo
+6. It saves the score + species + a few images you can look at
 ```
 
-That score is called an NDVI estimate. **Right now it's just a greenness
-proxy, not a real measurement.** Eventually it will be replaced by a model
-trained on real sensor data — the code is already built so that swap is easy.
+That score is a plain greenness number — the average "excess green"
+(`2G - R - B`) across the leaf pixels. **Right now it's a color measurement,
+not a real NDVI.** Eventually a model trained on real sensor data will replace
+it with true NDVI — the code is already built so that swap is easy.
 
 ## Quick start
 
 ```bash
-cd ~/Desktop/plantvision
+cd /path/to/DrHorticulture-Ver6    # from the repo root
 source .venv/bin/activate          # you only need this once per terminal
 pip install -e ".[ml,dev]"         # first time only: installs the heavy ML tools
 
-plantvision path/to/a/plant.jpg                    # basic run
-plantvision path/to/a/plant.jpg --save-mask --save-overlay --json   # + pictures & detail
+plantvision path/to/a/plant.jpg                    # prints greenness + species
+plantvision path/to/a/plant.jpg --debug            # + image path, coverage, saved files
+plantvision path/to/a/plant.jpg --save-mask --save-overlay --json   # + pictures & full JSON
 ```
 
 Tip: use a clear photo of a **whole potted plant** (pot + leaves). The built-in
 model only knows how to spot potted plants — it doesn't recognize a loose leaf.
 
+The first run downloads the species classifier (~390 MB) from Hugging Face and
+caches it; later runs are offline. The segmentation model ships with the repo.
+
 ## What you get
 
-`outputs/prediction.json` is the main result. In plain English it says: how much
-of the photo is leaf, what the average leaf colors are, and the NDVI estimate
-(`type: "rgb_proxy"` = greenness score, not measured NDVI).
+`outputs/prediction.json` is the main result. It says: how much of the photo
+is leaf, the average leaf colors, the **greenness** score
+(`greenness.value` = average excess green `2G - R - B` across leaf pixels),
+and the predicted **species** (`species.label`, with a confidence and the
+next-best candidates under `species.top_k`).
+
+`ndvi` and `fertilization` are present as placeholders with
+`"status": "unavailable"` until real sensor NDVI and the fertilizer logic
+exist.
 
 ## Folder tour
 

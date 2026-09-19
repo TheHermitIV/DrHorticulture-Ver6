@@ -1114,7 +1114,8 @@ A JSON result could contain:
   "image": "plant.jpg",
   "segmentation": {
     "leaf_pixels": 12345,
-    "leaf_coverage": 0.28
+    "leaf_coverage": 0.28,
+    "detections": 1
   },
   "features": {
     "mean_r": 91.2,
@@ -1122,16 +1123,36 @@ A JSON result could contain:
     "mean_b": 72.1,
     "exg": 105.7
   },
+  "feature_order": ["mean_r", "mean_g", "mean_b", "exg"],
+  "greenness": {
+    "value": 105.7,
+    "metric": "exg",
+    "description": "average excess green (2G - R - B) over leaf pixels, 0-255 scale"
+  },
+  "species": {
+    "label": "Digitalis purpurea",
+    "confidence": 0.0944,
+    "top_k": [
+      {"label": "Digitalis purpurea", "confidence": 0.0944}
+    ]
+  },
   "ndvi": {
-    "value": 0.62,
-    "type": "rgb_proxy"
+    "status": "unavailable",
+    "reason": "No sensor-trained NDVI model is available yet."
+  },
+  "fertilization": {
+    "status": "unavailable",
+    "reason": "A fertilization recommendation requires NDVI."
   }
 }
 ```
 
 The exact output schema can evolve.
 
-The `type` field is especially useful because it prevents users from confusing a proxy with a sensor-trained prediction.
+Until a sensor-trained model exists, the color-based result is emitted under
+`greenness` (not `ndvi`) so it is never confused with true NDVI. When a
+sensor-trained model is added it emits an `ndvi` block instead, keeping the two
+clearly separated.
 
 ---
 

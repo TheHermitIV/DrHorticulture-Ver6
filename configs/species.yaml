@@ -1,0 +1,18 @@
+# Species classification settings.
+# These values are deep-merged over the `species` section of default.yaml.
+
+# Enable/disable the species stage. When false, no species field is produced.
+enabled: true
+
+# Hugging Face model id (or a local directory) for the plant-species classifier.
+# First run downloads the weights (~390 MB) to the Hugging Face cache.
+model_id: domai-tb/OpenPlants-Identification-ViT-Base-Patch16-224
+
+# Input crop: "mask" crops to the segmented plant region, "full" uses the whole photo.
+crop: mask
+
+# Number of ranked candidates to report (the top one is the chosen label).
+top_k: 3
+
+# "cpu", "cuda", "mps", or null to auto-select.
+device: null

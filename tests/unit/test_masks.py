@@ -3,6 +3,7 @@ import pytest
 
 from plantvision import SegmentationError
 from plantvision.segmentation.mask import (
+    crop_to_mask,
     merge_masks,
     resize_mask,
     validate_mask,
@@ -71,3 +72,17 @@ def test_mismatched_mask_is_resized_then_merged():
     combined = merge_masks([resized], target_shape)
     assert combined.shape == target_shape
     assert int(combined.sum()) > 0
+
+
+def test_crop_to_mask_bounds():
+    image = np.zeros((10, 10, 3), dtype=np.uint8)
+    mask = np.zeros((10, 10), dtype=bool)
+    mask[3:6, 2:5] = True
+    crop = crop_to_mask(image, mask)
+    assert crop.shape == (3, 3, 3)
+
+
+def test_crop_to_mask_empty_returns_image():
+    image = np.ones((4, 4, 3), dtype=np.uint8)
+    crop = crop_to_mask(image, np.zeros((4, 4), dtype=bool))
+    assert crop.shape == (4, 4, 3)

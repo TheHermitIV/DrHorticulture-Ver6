@@ -8,6 +8,7 @@ venv/
 *.log
 
 models/segmentation/*.pt
+!models/segmentation/yolo11n-seg.pt
 models/ndvi/*
 !models/ndvi/.gitkeep
 

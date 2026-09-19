@@ -40,7 +40,6 @@ def test_predictor_proxy_mode(stub_config):
     prediction = predictor.predict(make_features())
     assert prediction.type == "rgb_proxy"
     assert prediction.value > 0
-    assert prediction.as_dict()["type"] == "rgb_proxy"
 
 
 def test_proxy_value_sane():

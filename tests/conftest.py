@@ -22,4 +22,5 @@ def stub_config():
 
     config = load_config()
     config.values["ndvi"]["mode"] = "proxy"
+    config.values.setdefault("species", {})["enabled"] = False
     return config

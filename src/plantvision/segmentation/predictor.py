@@ -29,7 +29,7 @@ class SegmentationPredictor:
     def from_config(cls, config):
         segmentation = config.section("segmentation")
         model_path = config.resolve(
-            segmentation.get("model_path", "models/segmentation/yolo26s-seg.pt")
+            segmentation.get("model_path", "models/segmentation/yolo11n-seg.pt")
         )
         model = YoloSegmentationModel(
             model_path=model_path,

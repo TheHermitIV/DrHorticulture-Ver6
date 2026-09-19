@@ -13,14 +13,6 @@ class NDVIPrediction:
     method: str = ""
     model_name: str = ""
 
-    def as_dict(self):
-        result = {"value": round(float(self.value), 6), "type": self.type}
-        if self.method:
-            result["method"] = self.method
-        if self.model_name:
-            result["model"] = self.model_name
-        return result
-
 
 class NDVIPredictor:
     def __init__(self, proxy, model=None, model_name=""):

@@ -42,3 +42,23 @@ def resize_mask(mask, shape):
     image = Image.fromarray((mask_array.astype(bool) * 255).astype(np.uint8), mode="L")
     resized = image.resize((int(shape[1]), int(shape[0])), Image.NEAREST)
     return np.asarray(resized) > 127
+
+
+def crop_to_mask(image, mask, padding=0):
+    image_array = np.asarray(image)
+    mask_array = np.asarray(mask, dtype=bool)
+    if mask_array.shape != image_array.shape[:2]:
+        raise SegmentationError(
+            f"Mask shape {mask_array.shape} does not match image {image_array.shape[:2]}"
+        )
+    rows = np.any(mask_array, axis=1)
+    cols = np.any(mask_array, axis=0)
+    if not rows.any() or not cols.any():
+        return image_array
+    rmin, rmax = np.where(rows)[0][[0, -1]]
+    cmin, cmax = np.where(cols)[0][[0, -1]]
+    rmin = max(int(rmin) - padding, 0)
+    cmin = max(int(cmin) - padding, 0)
+    rmax = min(int(rmax) + 1 + padding, image_array.shape[0])
+    cmax = min(int(cmax) + 1 + padding, image_array.shape[1])
+    return np.ascontiguousarray(image_array[rmin:rmax, cmin:cmax])

@@ -19,9 +19,6 @@ class ConfigSection:
     def get(self, item, default=None):
         return _to_section(self._data.get(item, default))
 
-    def __contains__(self, item):
-        return item in self._data
-
     def __repr__(self):
         return f"ConfigSection({self._data!r})"
 
@@ -37,8 +34,8 @@ class Config:
             raise ConfigError(f"Missing configuration section: '{name}'")
         return ConfigSection(section)
 
-    def resolve(self, path_value, base=None):
-        return resolve_path(path_value, base=base or self.config_dir)
+    def resolve(self, path_value):
+        return resolve_path(path_value, base=self.config_dir)
 
     def __repr__(self):
         return f"Config(config_dir={self.config_dir!r})"
@@ -68,16 +65,12 @@ def _deep_merge(base, override):
 def load_config(config_dir=None, overrides=None):
     base_dir = resolve_path(config_dir or default_config_dir())
     values = _read_yaml(str(Path(base_dir) / "default.yaml"))
-    segmentation_file = Path(base_dir) / "segmentation.yaml"
-    if segmentation_file.is_file():
-        values["segmentation"] = _deep_merge(
-            values.get("segmentation", {}), _read_yaml(str(segmentation_file))
-        )
-    ndvi_file = Path(base_dir) / "ndvi.yaml"
-    if ndvi_file.is_file():
-        values["ndvi"] = _deep_merge(
-            values.get("ndvi", {}), _read_yaml(str(ndvi_file))
-        )
+    for name in ("segmentation", "ndvi", "species"):
+        section_file = Path(base_dir) / f"{name}.yaml"
+        if section_file.is_file():
+            values[name] = _deep_merge(
+                values.get(name, {}), _read_yaml(str(section_file))
+            )
     if overrides:
         values = _deep_merge(values, overrides)
     return Config(values, config_dir=base_dir)

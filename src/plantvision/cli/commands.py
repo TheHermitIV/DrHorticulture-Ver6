@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import sys
 
 from plantvision import (
@@ -13,14 +14,34 @@ from plantvision.features.extractor import FeatureExtractor
 from plantvision.input.image_loader import load_image
 from plantvision.ndvi.predictor import NDVIPredictor
 from plantvision.segmentation.predictor import SegmentationPredictor
+from plantvision.species.predictor import SpeciesPredictor
 from plantvision.utils.logging import configure_logging, get_logger
 from plantvision.utils.paths import default_output_dir
+
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+os.environ.setdefault("HF_HUB_VERBOSITY", "error")
+os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+
+
+def _ndvi_summary(result):
+    ndvi = result.get("ndvi") or {}
+    if ndvi.get("status") == "available":
+        return f"NDVI: {ndvi['value']:.4f}"
+    return "NDVI: Unavailable"
+
+
+def _fertilization_summary(result):
+    fertilization = result.get("fertilization") or {}
+    if fertilization.get("status") == "available":
+        return f"Fertilization recommendation: {fertilization['recommendation']}"
+    return "Fertilization recommendation: Unavailable"
 
 
 def run_pipeline(
     image_path,
     config,
     segmentation_model=None,
+    species_model=None,
     output_dir=None,
     save_mask=False,
     save_overlay=False,
@@ -42,6 +63,16 @@ def run_pipeline(
         if int(segmentation_result.combined_mask.sum()) == 0:
             raise SegmentationError("Segmentation returned no usable leaf pixels.")
 
+    if species_model is not None:
+        species_predictor = SpeciesPredictor(species_model, crop="mask")
+    else:
+        species_predictor = SpeciesPredictor.from_config(config)
+    species_prediction = (
+        species_predictor.classify(image, segmentation_result.combined_mask)
+        if species_predictor is not None
+        else None
+    )
+
     features_include = config.section("features").get("include") or None
     features = FeatureExtractor(feature_keys=features_include).extract(
         image.array, segmentation_result.combined_mask
@@ -49,7 +80,13 @@ def run_pipeline(
 
     prediction = NDVIPredictor.from_config(config).predict(features)
 
-    result = build_result(image_path, segmentation_result, features, prediction)
+    result = build_result(
+        image_path,
+        segmentation_result,
+        features,
+        prediction,
+        species_prediction=species_prediction,
+    )
     artifacts = save_outputs(
         result,
         output_dir or default_output_dir(),
@@ -58,15 +95,15 @@ def run_pipeline(
         save_mask=save_mask,
         save_overlay=save_overlay,
     )
-    logger.info("Predicted NDVI %s (%s)", prediction.value, prediction.type)
+    logger.info("Prediction %s (%s)", prediction.value, prediction.type)
     return {"result": result, "artifacts": artifacts}
 
 
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="plantvision",
-        description="Segment the leaf region of an RGB plant image, extract RGB "
-        "features, and produce an NDVI estimate.",
+        description="Segment the leaf region of an RGB plant image, estimate its "
+        "greenness, and predict the plant species.",
     )
     parser.add_argument("image", help="Path to the input RGB plant image")
     parser.add_argument("--config-dir", default=None, help="Directory containing the YAML configs")
@@ -81,15 +118,24 @@ def build_parser():
     parser.add_argument("--save-mask", action="store_true", help="Write outputs/mask.png")
     parser.add_argument("--save-overlay", action="store_true", help="Write outputs/overlay.png")
     parser.add_argument("--json", action="store_true", help="Print the full result as JSON")
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Show detailed output (image path, leaf coverage, metrics, saved files)",
+    )
     parser.add_argument("--output-dir", default=None, help="Directory for output artifacts")
-    parser.add_argument("--log-level", default="INFO", help="Logging level")
+    parser.add_argument(
+        "--log-level",
+        default=None,
+        help="Logging level (default: WARNING; DEBUG when --debug is set)",
+    )
     parser.add_argument("--version", action="version", version=f"plantvision {__version__}")
     return parser
 
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
-    configure_logging(args.log_level)
+    configure_logging(args.log_level or ("DEBUG" if args.debug else "WARNING"))
     logger = get_logger("cli")
     try:
         overrides = {}
@@ -112,13 +158,31 @@ def main(argv=None):
 
         if args.json:
             print(json.dumps(result, indent=2))
-        else:
-            ndvi = result["ndvi"]
+        elif args.debug:
             print(f"image: {result['image']}")
             print(f"leaf coverage: {result['segmentation']['leaf_coverage']:.4f}")
-            print(f"ndvi estimate: {ndvi['value']:.4f} ({ndvi['type']})")
+            greenness = result.get("greenness")
+            if greenness:
+                print(
+                    f"greenness (avg {greenness['metric']}): "
+                    f"{greenness['value']:.2f}"
+                )
+            print(_ndvi_summary(result))
+            species = result.get("species")
+            if species:
+                print(f"species: {species['label']} ({species['confidence']:.2f})")
+            print(_fertilization_summary(result))
             for name, path in outcome["artifacts"].items():
                 print(f"saved {name}: {path}")
+        else:
+            greenness = result.get("greenness")
+            if greenness:
+                print(f"greenness: {greenness['value']:.2f}")
+            species = result.get("species")
+            if species:
+                print(f"species: {species['label']} ({species['confidence']:.2f})")
+            print(_ndvi_summary(result))
+            print(_fertilization_summary(result))
         return 0
     except PlantVisionError as exc:
         logger.error("%s", exc)

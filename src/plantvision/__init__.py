@@ -25,6 +25,10 @@ class ModelError(PlantVisionError):
     pass
 
 
+class SpeciesError(PlantVisionError):
+    pass
+
+
 __all__ = [
     "PlantVisionError",
     "ConfigError",
@@ -32,5 +36,6 @@ __all__ = [
     "SegmentationError",
     "FeatureError",
     "ModelError",
+    "SpeciesError",
     "__version__",
 ]
