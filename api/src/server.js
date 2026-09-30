@@ -1,5 +1,6 @@
 import { createApp } from './app.js';
 import { loadEnv } from './config/env.js';
+import { createDb } from './db/client.js';
 import { createLogger } from './logger.js';
 
 let env;
@@ -11,7 +12,7 @@ try {
 }
 
 const logger = createLogger(env.LOG_LEVEL);
-const app = createApp({ env, logger });
+const app = createApp({ env, logger, db: createDb(env) });
 
 // '::' accepts IPv4 and IPv6, which Railway's private network needs.
 const server = app.listen(env.PORT, '::', (err) => {
