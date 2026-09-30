@@ -22,8 +22,9 @@ it with true NDVI — the code is already built so that swap is easy.
 ## Quick start
 
 ```bash
-cd /path/to/DrHorticulture-Ver6    # from the repo root
-source .venv/bin/activate          # you only need this once per terminal
+cd /path/to/DrHorticulture-Ver6/plantvision
+python -m venv .venv               # first time only
+source .venv/bin/activate          # you only need this once per terminal (Windows: .venv\Scripts\activate)
 pip install -e ".[ml,dev]"         # first time only: installs the heavy ML tools
 
 plantvision path/to/a/plant.jpg                    # prints greenness + species
