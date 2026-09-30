@@ -1,23 +1,24 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+coverage/
+*.log
+
+# Python
 __pycache__/
 *.py[cod]
-*.egg-info/
 .venv/
 venv/
 .pytest_cache/
-.env
-*.log
 
-models/segmentation/*.pt
-!models/segmentation/yolo11n-seg.pt
-models/ndvi/*
-!models/ndvi/.gitkeep
+# Supabase CLI local state
+supabase/.temp/
+supabase/.branches/
 
-data/raw/*
-data/processed/*
-data/masks/*
-data/features/*
-data/labels/*
-!*/**/.gitkeep
-
-outputs/*
-!outputs/.gitkeep
+# OS
+.DS_Store
+Thumbs.db
