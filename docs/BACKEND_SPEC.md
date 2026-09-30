@@ -496,13 +496,13 @@ The phases group into modules that can be picked up as units of work. After M0, 
 
 ### Phase 0 — Foundation (Sprint 1)
 
-- [ ] **0.1** Create the monorepo layout from Repository structure (PlantVision is already moved into `plantvision/`), with ESLint, Prettier, `.gitignore`, and `api/.env.example`.
-- [ ] **0.2** Scaffold the Express 5 app: `app.js` / `server.js` split, listening on `::`, with `pino-http`, a request-id middleware, and a central error handler emitting the shared error shape.
-- [ ] **0.3** Add `config/env.js` with zod validation of every env var; the app exits non-zero on invalid config.
-- [ ] **0.4** Add `GET /health` that returns db reachability (a trivial Supabase query) and `inference_mode`.
+- [x] **0.1** Create the monorepo layout from Repository structure (PlantVision is already moved into `plantvision/`), with ESLint, Prettier, `.gitignore`, and `api/.env.example`.
+- [x] **0.2** Scaffold the Express 5 app: `app.js` / `server.js` split, listening on `::`, with `pino-http`, a request-id middleware, and a central error handler emitting the shared error shape.
+- [x] **0.3** Add `config/env.js` with zod validation of every env var; the app exits non-zero on invalid config.
+- [x] **0.4** Add `GET /health` that returns db reachability (a trivial Supabase query) and `inference_mode`.
 - [ ] **0.5** Commit `supabase/migrations/0001_init.sql` from Data model, apply it to the Supabase project, and create the private bucket `scan-images`.
-- [ ] **0.6** Commit `contracts/inference.v1.schema.json` and `contracts/inference.v1.example.json` from Inference contract.
-- [ ] **0.7** Add a GitHub Actions workflow that runs lint and `vitest` for `api/`, and `pytest` for `inference/` and `plantvision/`, on pushes to `Backend` and `main` and on PRs to `main`.
+- [x] **0.6** Commit `contracts/inference.v1.schema.json` and `contracts/inference.v1.example.json` from Inference contract.
+- [x] **0.7** Add a GitHub Actions workflow that runs lint and `vitest` for `api/`, and `pytest` for `inference/` and `plantvision/`, on pushes to `Backend` and `main` and on PRs to `main`.
 - [ ] **0.8** Create the Railway project and the `api` service (root `/api`), set env vars, and turn on auto-deploy from `main`.
 
 **Done when:** the Railway URL `/health` returns 200 with `db: "ok"`, and CI is green on `main`.
