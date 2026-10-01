@@ -560,7 +560,7 @@ The phases group into modules that can be picked up as units of work. After M0, 
 - [x] **0.2** Scaffold the Express 5 app: `app.js` / `server.js` split, listening on `::`, with `pino-http`, a request-id middleware, and a central error handler emitting the shared error shape.
 - [x] **0.3** Add `config/env.js` with zod validation of every env var; the app exits non-zero on invalid config.
 - [x] **0.4** Add `GET /health` that returns db reachability (a trivial Supabase query) and `inference_mode`.
-- [ ] **0.5** Commit `supabase/migrations/` (0001 schema, 0002 private bucket `scan-images`, 0003 the 2026-10-01 changes) and apply them in order to the Supabase project.
+- [x] **0.5** Commit `supabase/migrations/` (0001 schema, 0002 private bucket `scan-images`, 0003 the 2026-10-01 changes) and apply them in order to the Supabase project.
 - [x] **0.6** Commit `contracts/inference.v1.schema.json` and `contracts/inference.v1.example.json` from Inference contract.
 - [x] **0.7** Add a GitHub Actions workflow that runs lint and `vitest` for `api/`, and `pytest` for `inference/` and `plantvision/`, on pushes to `Backend` and `main` and on PRs to `main`.
 - [x] **0.8** Create the Railway project and the `api` service (root `/api`), set env vars, and turn on auto-deploy from `main`.
@@ -569,11 +569,11 @@ The phases group into modules that can be picked up as units of work. After M0, 
 
 ### Phase 1 — Intake and storage (Sprint 2)
 
-- [ ] **1.1** Add the multer upload middleware: memory storage, `MAX_UPLOAD_MB` limit, magic-byte type check, HEIC → 415.
-- [ ] **1.2** Build `intake.js`: optional species validation, `sharp` metadata and auto-orient, and the EXIF allowlist via `exifr`.
-- [ ] **1.3** Build `storage.js`: upload the original to `scans/{scan_id}/{image_id}.{ext}`, and create signed URLs (5 min for inference, 1 h for clients).
-- [ ] **1.4** Implement `POST /api/v1/scans` up to storage: insert the `scans` + `scan_images` rows and return 201 with status `uploaded`.
-- [ ] **1.5** Add `public/test.html`, served only when `NODE_ENV` is not `production`: a file picker, an optional species field, one button, and the raw JSON response.
+- [x] **1.1** Add the multer upload middleware: memory storage, `MAX_UPLOAD_MB` limit, magic-byte type check, HEIC → 415.
+- [x] **1.2** Build `intake.js`: optional species validation, `sharp` metadata and auto-orient, and the EXIF allowlist via `exifr`.
+- [x] **1.3** Build `storage.js`: upload the original to `scans/{scan_id}/{image_id}.{ext}`, and create signed URLs (5 min for inference, 1 h for clients).
+- [x] **1.4** Implement `POST /api/v1/scans` up to storage: insert the `scans` + `scan_images` rows and return 201 with status `uploaded`.
+- [x] **1.5** Add `public/test.html`, served only when `NODE_ENV` is not `production`: a file picker, an optional species field, one button, and the raw JSON response.
 
 **Done when:** an upload from the test page puts the file in the bucket and the rows in both tables, with EXIF filled in and no GPS.
 
