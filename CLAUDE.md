@@ -89,15 +89,21 @@ pytest on Python 3.12, on pushes to `Backend`/`main` and PRs to `main`.
 ## api structure
 
 `src/server.js` loads env, builds the logger, the Supabase client (`src/db/`, one query module per table),
-and the storage service, and calls `createApp({ env, logger, db, storage })` from `src/app.js`. Everything
-the app needs is injected through `createApp`, so tests build the app with `testEnv()`, a silent logger,
-and the in-memory `fakeDb()` / `fakeStorage()` from `test/helpers.js`, and never touch Supabase or the
-network. `fakeDb()` serves the v1 seed `decision_config` (`SEED_CONFIG`) unless given another. Test images
-are generated in memory by `test/images.js`: `makeImage()` is a tiny solid image that fails the quality
-gate, `makePhoto()` a leaf scene that passes it. Keep new routes and services injectable the same way.
+and the storage service, and calls `createApp({ env, logger, db, storage })` from `src/app.js`, which also
+builds the inference adapter for `INFERENCE_MODE` (`src/inference/index.js`: `mock.js` or `remote.js`)
+unless one is passed in. Everything the app needs is injected through `createApp`, so tests build the app
+with `testEnv()`, a silent logger, and the in-memory `fakeDb()` / `fakeStorage()` from `test/helpers.js`,
+and never touch Supabase or the network. `fakeDb()` serves the v1 seed `decision_config` (`SEED_CONFIG`)
+unless given another. Test images are generated in memory by `test/images.js`: `makeImage()` is a tiny
+solid image that fails the quality gate, `makePhoto()` a leaf scene that passes it. Keep new routes and
+services injectable the same way.
 
 `POST /api/v1/scans` runs `middleware/upload.js` (one JPEG/PNG, typed by magic bytes), then
 `services/pipeline.js`: `intake.js` → `qualityGate.js` (Tier A, thresholds from `configService.js`) →
-`storage.js` → rows. A photo that fails the gate is still stored, on a `rejected` scan, and the request
-returns 422 `IMAGE_REJECTED` with that `scan_id`. Phase 3 adds inference and `decision.js` to the same
-pipeline.
+`storage.js` → rows → inference → `decision.js` → an `analyses` row → the final status. A photo that fails
+Tier A is still stored, on a `rejected` scan, and the request returns 422 `IMAGE_REJECTED` with that
+`scan_id`; a Tier B rejection from `decide()` does the same after recording the analysis. Any failure
+after storage marks the scan `failed` (503 `INFERENCE_UNAVAILABLE` for inference, else 500) and records
+the error in `analyses.error`. In mock mode outside production, the `x-mock-scenario` header
+(`low_confidence`, `no_plant`, `error`) forces each outcome; the mock keeps its own copy of
+`contracts/inference.v1.example.json` because Railway builds the api from `api/` alone.

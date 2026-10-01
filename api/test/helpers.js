@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import pino from 'pino';
 
 import { loadEnv } from '../src/config/env.js';
@@ -30,13 +32,19 @@ export const SEED_CONFIG = Object.freeze({
   }),
 });
 
-// In-memory stand-in for src/db/client.js. failOn: 'scans.insert' | 'scanImages.insert'.
-// config: the active decision_config row (null for none).
+// In-memory stand-in for src/db/client.js. failOn: a query to fail, such as 'scans.insert',
+// 'scanImages.update', or 'analyses.insert'. config: the active decision_config row (null for
+// none).
 export function fakeDb({ failOn, config = SEED_CONFIG } = {}) {
-  const tables = { scans: [], scan_images: [] };
+  const tables = { scans: [], scan_images: [], analyses: [] };
   const now = () => new Date().toISOString();
   const maybeFail = (query) => {
     if (failOn === query) throw new Error(`Database ${query} failed: connection reset`);
+  };
+  const updateRow = (table, id, fields) => {
+    const row = tables[table].find((candidate) => candidate.id === id);
+    if (!row) throw new Error(`Database update ${table} failed: no row ${id}`);
+    return Object.assign(row, fields);
   };
   return {
     tables,
@@ -52,11 +60,16 @@ export function fakeDb({ failOn, config = SEED_CONFIG } = {}) {
           ...row,
         };
         tables.scans.push(saved);
-        return saved;
+        return { ...saved };
+      },
+      async setStatus(id, status) {
+        maybeFail('scans.setStatus');
+        return { ...updateRow('scans', id, { status, updated_at: now() }) };
       },
       async remove(id) {
         tables.scans = tables.scans.filter((scan) => scan.id !== id);
         tables.scan_images = tables.scan_images.filter((image) => image.scan_id !== id);
+        tables.analyses = tables.analyses.filter((analysis) => analysis.scan_id !== id);
       },
     },
     scanImages: {
@@ -70,7 +83,34 @@ export function fakeDb({ failOn, config = SEED_CONFIG } = {}) {
           ...row,
         };
         tables.scan_images.push(saved);
-        return saved;
+        return { ...saved };
+      },
+      async update(id, fields) {
+        maybeFail('scanImages.update');
+        return { ...updateRow('scan_images', id, fields) };
+      },
+    },
+    analyses: {
+      async insert(row) {
+        maybeFail('analyses.insert');
+        const saved = {
+          id: randomUUID(),
+          model_version: null,
+          mask_confidence: null,
+          leaf_fraction: null,
+          features: {},
+          ndvi: null,
+          confidence: null,
+          recommendation: null,
+          abstain_reason: null,
+          raw_response: null,
+          error: null,
+          latency_ms: null,
+          created_at: now(),
+          ...row,
+        };
+        tables.analyses.push(saved);
+        return { ...saved };
       },
     },
     decisionConfig: {

@@ -45,6 +45,15 @@
         Species (optional)
         <input type="text" name="species" maxlength="64" placeholder="geranium" />
       </label>
+      <label>
+        Mock scenario (sent as <code>x-mock-scenario</code>; mock mode only)
+        <select name="scenario">
+          <option value="">None: the contract example, a recommendation</option>
+          <option value="low_confidence">low_confidence: abstained</option>
+          <option value="no_plant">no_plant: rejected (422)</option>
+          <option value="error">error: failed (503)</option>
+        </select>
+      </label>
       <button type="submit">Send</button>
     </form>
 
@@ -64,7 +73,11 @@
         output.textContent = '';
         const started = performance.now();
         try {
-          const res = await fetch('/api/v1/scans', { method: 'POST', body: new FormData(form) });
+          const body = new FormData(form);
+          const scenario = body.get('scenario');
+          body.delete('scenario');
+          const headers = scenario ? { 'x-mock-scenario': scenario } : {};
+          const res = await fetch('/api/v1/scans', { method: 'POST', body, headers });
           const seconds = ((performance.now() - started) / 1000).toFixed(2);
           status.textContent = `HTTP ${res.status} in ${seconds} s · request id ${res.headers.get('x-request-id')}`;
           const text = await res.text();

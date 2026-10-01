@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { pinoHttp } from 'pino-http';
 
+import { createInference } from './inference/index.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { requestId } from './middleware/requestId.js';
 import { healthRouter } from './routes/health.js';
@@ -18,7 +19,8 @@ function logLevelFor(_req, res, err) {
   return 'info';
 }
 
-export function createApp({ env, logger, db, storage }) {
+// inference defaults to the adapter for env.INFERENCE_MODE; tests can pass their own.
+export function createApp({ env, logger, db, storage, inference = createInference(env) }) {
   const app = express();
   app.disable('x-powered-by');
 
@@ -28,7 +30,7 @@ export function createApp({ env, logger, db, storage }) {
   const config = createConfigService({ db });
 
   app.use(healthRouter({ env, db }));
-  app.use(scansRouter({ env, pipeline: createPipeline({ db, storage, config }) }));
+  app.use(scansRouter({ env, pipeline: createPipeline({ db, storage, config, inference }) }));
 
   // public/test.html: a one-button upload page for local testing, never served in production.
   if (env.NODE_ENV !== 'production') {

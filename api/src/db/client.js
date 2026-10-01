@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
+import { analysesQueries } from './analyses.js';
 import { decisionConfigQueries } from './decisionConfig.js';
 import { scanImagesQueries } from './scanImages.js';
 import { scansQueries } from './scans.js';
@@ -16,6 +17,7 @@ export function createDb(env) {
     scans: scansQueries(supabase),
     scanImages: scanImagesQueries(supabase),
     decisionConfig: decisionConfigQueries(supabase),
+    analyses: analysesQueries(supabase),
 
     // Reads decision_config, so it also fails until the 0001 migration is applied.
     async ping() {

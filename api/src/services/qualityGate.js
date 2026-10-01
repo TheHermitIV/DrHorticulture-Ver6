@@ -28,6 +28,15 @@ export const REJECTIONS = Object.freeze({
   too_bright: { message: 'Photo is too bright.', hint: 'Avoid direct sun or flash glare.' },
   overexposed: { message: 'Photo is overexposed.', hint: 'Avoid direct sun on the leaves.' },
   blurry: { message: 'Photo is blurry.', hint: 'Hold still and tap to focus on the leaves.' },
+  // Tier B: decided by services/decision.js from the inference response.
+  no_plant_detected: {
+    message: 'No plant was found in the photo.',
+    hint: 'Center the plant and fill the frame.',
+  },
+  bad_angle: {
+    message: 'Photo was taken from the wrong angle.',
+    hint: 'Shoot from above at the angle in the guide.',
+  },
 });
 
 // Tier A checks in the order their reasons are reported. Every check runs; all failures return.
