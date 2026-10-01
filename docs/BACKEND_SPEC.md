@@ -563,7 +563,7 @@ The phases group into modules that can be picked up as units of work. After M0, 
 - [ ] **0.5** Commit `supabase/migrations/` (0001 schema, 0002 private bucket `scan-images`, 0003 the 2026-10-01 changes) and apply them in order to the Supabase project.
 - [x] **0.6** Commit `contracts/inference.v1.schema.json` and `contracts/inference.v1.example.json` from Inference contract.
 - [x] **0.7** Add a GitHub Actions workflow that runs lint and `vitest` for `api/`, and `pytest` for `inference/` and `plantvision/`, on pushes to `Backend` and `main` and on PRs to `main`.
-- [ ] **0.8** Create the Railway project and the `api` service (root `/api`), set env vars, and turn on auto-deploy from `main`.
+- [x] **0.8** Create the Railway project and the `api` service (root `/api`), set env vars, and turn on auto-deploy from `main`.
 
 **Done when:** the Railway URL `/health` returns 200 with `db: "ok"`, and CI is green on `main`.
 
