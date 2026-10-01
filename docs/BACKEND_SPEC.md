@@ -593,7 +593,7 @@ The phases group into modules that can be picked up as units of work. After M0, 
 
 - [x] **3.1** Build `inference/schema.js`, a zod schema mirroring the contract, with range checks.
 - [x] **3.2** Build `inference/mock.js` (the example file plus `x-mock-scenario` outside production) and `inference/remote.js` (fetch with `x-inference-key`, timeout, 1 retry, schema validation).
-- [ ] **3.3** Build `inference/index.js`, which picks the adapter from `INFERENCE_MODE`.
+- [x] **3.3** Build `inference/index.js`, which picks the adapter from `INFERENCE_MODE`.
 - [ ] **3.4** Build `decision.js` exactly as specified (Tier B included), plus unit tests for every branch and boundary value.
 - [ ] **3.5** Finish `pipeline.js`: status `processing` → inference → `decide()` → `analyses` row (versions, latency, raw response) → final status. A failure sets `failed` and returns 503.
 - [ ] **3.6** Implement `GET /scans/:id` and `GET /scans` (cursor pagination, newest first, signed image URLs).
