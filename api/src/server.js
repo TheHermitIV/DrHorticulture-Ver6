@@ -2,6 +2,7 @@ import { createApp } from './app.js';
 import { loadEnv } from './config/env.js';
 import { createDb } from './db/client.js';
 import { createLogger } from './logger.js';
+import { createStorage } from './services/storage.js';
 
 let env;
 try {
@@ -12,7 +13,9 @@ try {
 }
 
 const logger = createLogger(env.LOG_LEVEL);
-const app = createApp({ env, logger, db: createDb(env) });
+const db = createDb(env);
+const storage = createStorage({ supabase: db.supabase, bucket: env.SUPABASE_BUCKET });
+const app = createApp({ env, logger, db, storage });
 
 // '::' accepts IPv4 and IPv6, which Railway's private network needs.
 const server = app.listen(env.PORT, '::', (err) => {

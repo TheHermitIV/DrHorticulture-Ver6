@@ -1,5 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
+import { scanImagesQueries } from './scanImages.js';
+import { scansQueries } from './scans.js';
+
 const PING_TIMEOUT_MS = 3000;
 
 export function createDb(env) {
@@ -9,6 +12,8 @@ export function createDb(env) {
 
   return {
     supabase,
+    scans: scansQueries(supabase),
+    scanImages: scanImagesQueries(supabase),
 
     // Reads decision_config, so it also fails until the 0001 migration is applied.
     async ping() {

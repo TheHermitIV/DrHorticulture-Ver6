@@ -4,6 +4,8 @@ import { pinoHttp } from 'pino-http';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { requestId } from './middleware/requestId.js';
 import { healthRouter } from './routes/health.js';
+import { scansRouter } from './routes/scans.js';
+import { createPipeline } from './services/pipeline.js';
 
 function logLevelFor(_req, res, err) {
   if (err || res.statusCode >= 500) return 'error';
@@ -11,7 +13,7 @@ function logLevelFor(_req, res, err) {
   return 'info';
 }
 
-export function createApp({ env, logger, db }) {
+export function createApp({ env, logger, db, storage }) {
   const app = express();
   app.disable('x-powered-by');
 
@@ -19,6 +21,7 @@ export function createApp({ env, logger, db }) {
   app.use(pinoHttp({ logger, genReqId: (req) => req.id, customLogLevel: logLevelFor }));
 
   app.use(healthRouter({ env, db }));
+  app.use(scansRouter({ env, pipeline: createPipeline({ db, storage }) }));
 
   app.use(notFoundHandler);
   app.use(errorHandler);
