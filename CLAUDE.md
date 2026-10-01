@@ -19,8 +19,9 @@ a task before starting it. Its agent rules apply:
 ## Scope
 
 The backend builds the *structure* the team will plug models into, not the models. The CV and ML stages of
-the inference service are stubs that return contract-valid data (`inference/cv/`, `inference/ml/`, selected
-by `CV_MODEL` / `ML_MODEL`). Don't implement computer-vision or ML logic.
+the inference service are stubs behind two fixed seams, `cv.analyze(image)` (`inference/cv/`) and
+`ml.predict(embedding, species_probs)` (`inference/ml/`), that return contract-valid hardcoded data;
+teammates replace only the function bodies. Don't implement computer-vision or ML logic.
 
 `plantvision/` is the ML team's existing CV pipeline prototype (self-contained Python package with its own
 `CLAUDE.md`, README, and tests). Don't modify it beyond keeping it working inside the monorepo.
@@ -33,13 +34,16 @@ integrates `Backend` into the fork's `main`, tests, and then merges into the tea
 
 ## Layout
 
-Monorepo, one folder per Railway service (see the spec's Repository structure for the full tree; folders
-that don't exist yet are created by their Action plan tasks):
+Monorepo, one folder per service (see the spec's Repository structure for the full tree; folders that
+don't exist yet are created by their Action plan tasks):
 
-- `api/` — Node 24 + Express 5 (ES modules, JavaScript). Public; owns every rule and every write.
-- `inference/` — Python 3.12 + Flask + gunicorn. Private; turns an image URL into numbers, never writes data.
+- `api/` — Node 24 + Express 5 (ES modules, JavaScript). On Railway (Hobby plan); public; owns every rule
+  and every write.
+- `inference/` — Python 3.12 + Flask + gunicorn. Runs on whatever host the team picks (see the spec's
+  Hosting and budget); turns an image URL into raw numbers, never decides, never writes data.
 - `contracts/` — `inference.v1.schema.json` + `inference.v1.example.json`, the single source of truth for
-  the api ↔ inference boundary. v1 is never changed in place; breaking changes become v2.
+  the api ↔ inference boundary. v1 was revised in place on 2026-10-01 because no inference service was
+  live; once one is, v1 is frozen and breaking changes become v2.
 - `supabase/migrations/` — Postgres schema (Supabase CLI).
 - `plantvision/` — ML team's CV prototype (see above).
 
@@ -48,7 +52,8 @@ that don't exist yet are created by their Action plan tasks):
 These span multiple files and are easy to break:
 
 - Product thresholds (NDVI, confidence, mask, Tier A quality gate) come from the active `decision_config`
-  row, never from code or env vars.
+  row, never from code or env vars. Inference returns raw numbers only; `api/src/services/decision.js`
+  makes every decision (Tier B rejections, abstentions, and the recommendation).
 - `abstained` (model not confident) and `failed` (system error) scan statuses must never be conflated —
   abstention rate is an evaluation metric.
 - All api errors go through `AppError` and the shared error shape; route handlers stay thin, logic lives
@@ -56,7 +61,9 @@ These span multiple files and are easy to break:
 - The stored image is the untouched original; GPS EXIF is never stored; the bucket is private and clients
   only get signed URLs.
 - Inference responses are schema-validated by the api before use; the mock adapter, the inference stubs,
-  and `contracts/inference.v1.example.json` must stay in sync (a contract test enforces this).
+  and `contracts/inference.v1.example.json` must stay in sync (a contract test enforces this). Every call
+  to inference carries `x-inference-key`; inference never gets Supabase keys.
+- Applied migrations in `supabase/migrations/` are never edited; schema changes go in a new numbered file.
 
 ## Commands
 
