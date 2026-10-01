@@ -107,3 +107,7 @@ after storage marks the scan `failed` (503 `INFERENCE_UNAVAILABLE` for inference
 the error in `analyses.error`. In mock mode outside production, the `x-mock-scenario` header
 (`low_confidence`, `no_plant`, `error`) forces each outcome; the mock keeps its own copy of
 `contracts/inference.v1.example.json` because Railway builds the api from `api/` alone.
+
+`GET /api/v1/scans/:id` and `GET /api/v1/scans` (opaque cursor pages, newest first by `created_at` then
+`id`) go through `services/scanReader.js`. A scan object always shows the scan's latest image and that
+image's latest analysis; `result` is set only for `completed` and `abstained` scans.

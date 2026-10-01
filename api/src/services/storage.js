@@ -8,6 +8,12 @@ export function objectPath({ scanId, imageId, ext }) {
   return `scans/${scanId}/${imageId}.${ext}`;
 }
 
+function expiresFor(purpose) {
+  const seconds = SIGNED_URL_SECONDS[purpose];
+  if (!seconds) throw new Error(`Unknown signed URL purpose: ${purpose}`);
+  return seconds;
+}
+
 function storageError(action, error) {
   return new Error(`Storage ${action} failed: ${error.message}`, { cause: error });
 }
@@ -30,11 +36,18 @@ export function createStorage({ supabase, bucket }) {
 
     // purpose: 'inference' (5 min) or 'client' (1 h).
     async signedUrl(path, purpose) {
-      const expiresIn = SIGNED_URL_SECONDS[purpose];
-      if (!expiresIn) throw new Error(`Unknown signed URL purpose: ${purpose}`);
-      const { data, error } = await files().createSignedUrl(path, expiresIn);
+      const { data, error } = await files().createSignedUrl(path, expiresFor(purpose));
       if (error) throw storageError('signed URL', error);
       return data.signedUrl;
+    },
+
+    // Several signed URLs in one request: Map path → URL, or → null for a path that failed
+    // alone (such as a missing object).
+    async signedUrls(paths, purpose) {
+      if (paths.length === 0) return new Map();
+      const { data, error } = await files().createSignedUrls(paths, expiresFor(purpose));
+      if (error) throw storageError('signed URLs', error);
+      return new Map(data.map((item) => [item.path, item.error ? null : item.signedUrl]));
     },
 
     async remove(path) {

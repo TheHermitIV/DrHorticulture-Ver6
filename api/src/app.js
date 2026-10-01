@@ -10,6 +10,7 @@ import { healthRouter } from './routes/health.js';
 import { scansRouter } from './routes/scans.js';
 import { createConfigService } from './services/configService.js';
 import { createPipeline } from './services/pipeline.js';
+import { createScanReader } from './services/scanReader.js';
 
 const PUBLIC_DIR = fileURLToPath(new URL('../public', import.meta.url));
 
@@ -30,7 +31,13 @@ export function createApp({ env, logger, db, storage, inference = createInferenc
   const config = createConfigService({ db });
 
   app.use(healthRouter({ env, db }));
-  app.use(scansRouter({ env, pipeline: createPipeline({ db, storage, config, inference }) }));
+  app.use(
+    scansRouter({
+      env,
+      pipeline: createPipeline({ db, storage, config, inference }),
+      reader: createScanReader({ db, storage }),
+    }),
+  );
 
   // public/test.html: a one-button upload page for local testing, never served in production.
   if (env.NODE_ENV !== 'production') {

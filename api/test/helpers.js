@@ -37,7 +37,25 @@ export const SEED_CONFIG = Object.freeze({
 // none).
 export function fakeDb({ failOn, config = SEED_CONFIG } = {}) {
   const tables = { scans: [], scan_images: [], analyses: [] };
-  const now = () => new Date().toISOString();
+  // Strictly increasing, like rows written by separate requests to Postgres.
+  let clock = 0;
+  const now = () => {
+    clock = Math.max(Date.now(), clock + 1);
+    return new Date(clock).toISOString();
+  };
+  // Map key → newest row per value; rows are appended, so the last one written wins.
+  const latestBy = (rows, key, values) => {
+    const latest = new Map();
+    for (const row of rows.toReversed()) {
+      if (values.includes(row[key]) && !latest.has(row[key])) latest.set(row[key], { ...row });
+    }
+    return latest;
+  };
+  // created_at desc, then id desc, as db/scans.js orders them.
+  const newerFirst = (a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id);
+  const olderThan = (row, before) =>
+    row.created_at < before.created_at ||
+    (row.created_at === before.created_at && row.id < before.id);
   const maybeFail = (query) => {
     if (failOn === query) throw new Error(`Database ${query} failed: connection reset`);
   };
@@ -62,6 +80,17 @@ export function fakeDb({ failOn, config = SEED_CONFIG } = {}) {
         tables.scans.push(saved);
         return { ...saved };
       },
+      async get(id) {
+        const scan = tables.scans.find((row) => row.id === id);
+        return scan ? { ...scan } : null;
+      },
+      async list({ limit, before = null }) {
+        return tables.scans
+          .filter((row) => !before || olderThan(row, before))
+          .sort(newerFirst)
+          .slice(0, limit)
+          .map((row) => ({ ...row }));
+      },
       async setStatus(id, status) {
         maybeFail('scans.setStatus');
         return { ...updateRow('scans', id, { status, updated_at: now() }) };
@@ -84,6 +113,9 @@ export function fakeDb({ failOn, config = SEED_CONFIG } = {}) {
         };
         tables.scan_images.push(saved);
         return { ...saved };
+      },
+      async latestByScan(scanIds) {
+        return latestBy(tables.scan_images, 'scan_id', scanIds);
       },
       async update(id, fields) {
         maybeFail('scanImages.update');
@@ -112,6 +144,9 @@ export function fakeDb({ failOn, config = SEED_CONFIG } = {}) {
         tables.analyses.push(saved);
         return { ...saved };
       },
+      async latestByImage(imageIds) {
+        return latestBy(tables.analyses, 'image_id', imageIds);
+      },
     },
     decisionConfig: {
       getActive: async () => (config ? structuredClone(config) : null),
@@ -132,6 +167,11 @@ export function fakeStorage() {
     },
     async signedUrl(path, purpose) {
       return `https://storage.test/${path}?purpose=${purpose}`;
+    },
+    async signedUrls(paths, purpose) {
+      return new Map(
+        paths.map((path) => [path, `https://storage.test/${path}?purpose=${purpose}`]),
+      );
     },
     async remove(path) {
       objects.delete(path);
