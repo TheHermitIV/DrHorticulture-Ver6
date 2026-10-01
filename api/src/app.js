@@ -7,6 +7,7 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { requestId } from './middleware/requestId.js';
 import { healthRouter } from './routes/health.js';
 import { scansRouter } from './routes/scans.js';
+import { createConfigService } from './services/configService.js';
 import { createPipeline } from './services/pipeline.js';
 
 const PUBLIC_DIR = fileURLToPath(new URL('../public', import.meta.url));
@@ -24,8 +25,10 @@ export function createApp({ env, logger, db, storage }) {
   app.use(requestId);
   app.use(pinoHttp({ logger, genReqId: (req) => req.id, customLogLevel: logLevelFor }));
 
+  const config = createConfigService({ db });
+
   app.use(healthRouter({ env, db }));
-  app.use(scansRouter({ env, pipeline: createPipeline({ db, storage }) }));
+  app.use(scansRouter({ env, pipeline: createPipeline({ db, storage, config }) }));
 
   // public/test.html: a one-button upload page for local testing, never served in production.
   if (env.NODE_ENV !== 'production') {
