@@ -15,7 +15,8 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "gate:calibrate": "node --env-file-if-exists=.env scripts/gate-calibrate.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.117.2",

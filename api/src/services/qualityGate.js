@@ -31,13 +31,17 @@ export const REJECTIONS = Object.freeze({
 });
 
 // Tier A checks in the order their reasons are reported. Every check runs; all failures return.
-const CHECKS = [
-  ['resolution_too_low', (m, q) => m.short_side_px < q.min_short_side_px],
-  ['too_dark', (m, q) => m.mean_luminance < q.luminance_min],
-  ['too_bright', (m, q) => m.mean_luminance > q.luminance_max],
-  ['overexposed', (m, q) => m.clipped_pct > q.clipped_max_pct],
-  ['blurry', (m, q) => m.laplacian_var < q.blur_min],
-];
+// A check fails when its metric is below (or above) the named decision_config.quality key.
+export const TIER_A_CHECKS = Object.freeze([
+  { reason: 'resolution_too_low', metric: 'short_side_px', below: 'min_short_side_px' },
+  { reason: 'too_dark', metric: 'mean_luminance', below: 'luminance_min' },
+  { reason: 'too_bright', metric: 'mean_luminance', above: 'luminance_max' },
+  { reason: 'overexposed', metric: 'clipped_pct', above: 'clipped_max_pct' },
+  { reason: 'blurry', metric: 'laplacian_var', below: 'blur_min' },
+]);
+
+const fails = ({ metric, below, above }, metrics, thresholds) =>
+  below ? metrics[metric] < thresholds[below] : metrics[metric] > thresholds[above];
 
 const round2 = (value) => Math.round(value * 100) / 100;
 
@@ -99,8 +103,8 @@ export async function measureQuality(buffer) {
 
 // Applies decision_config.quality to measured metrics.
 export function judgeQuality(metrics, thresholds) {
-  const failed = CHECKS.filter(([, fails]) => fails(metrics, thresholds));
-  const reasons = failed.map(([reason]) => reason);
+  const failed = TIER_A_CHECKS.filter((check) => fails(check, metrics, thresholds));
+  const reasons = failed.map((check) => check.reason);
   return {
     passed: reasons.length === 0,
     reasons,
