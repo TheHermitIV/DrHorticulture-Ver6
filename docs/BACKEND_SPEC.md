@@ -442,6 +442,8 @@ Compute every metric on a grayscale copy downscaled to 1024 px wide, so values a
 | Clipping | % of pixels ≥ 250 | > `clipped_max_pct` (5) | `overexposed` | Avoid direct sun on the leaves |
 | Blur | Laplacian variance (3×3 kernel, `sharp` convolve with offset 128) | < `blur_min` (100) | `blurry` | Hold still and tap to focus on the leaves |
 
+The metrics are stored in `scan_images.quality_metrics` and returned as `image.quality.metrics`, rounded to 2 decimals, with the keys `short_side_px`, `mean_luminance`, `clipped_pct`, and `laplacian_var`. They do not depend on the thresholds, so stored photos can be re-judged when the thresholds change. A metric exactly at its threshold passes. The gate runs before the photo is stored. A photo that fails is still stored, on a scan with status `rejected`, so a retake can be added to it, and the request returns 422 `IMAGE_REJECTED` with that `scan_id`.
+
 **Quality gate, Tier B (from the inference response)**
 
 - `segmentation.plant_detected = false` → reject with `no_plant_detected` ("Center the plant and fill the frame").
@@ -579,11 +581,11 @@ The phases group into modules that can be picked up as units of work. After M0, 
 
 ### Phase 2 — Quality gate, Tier A (Sprint 2)
 
-- [ ] **2.1** Add `configService.js`, which loads the active `decision_config` row with a 60 s in-memory cache.
-- [ ] **2.2** Build `qualityGate.js`, which computes the five Tier A metrics from Pipeline behavior and returns `{ passed, metrics, reasons, hints }`.
-- [ ] **2.3** Wire the gate into the pipeline: save metrics and reasons on `scan_images`; on failure set status `rejected` and return 422 `IMAGE_REJECTED`.
-- [ ] **2.4** Write `scripts/gate-calibrate.js`, which runs the gate over a folder of lab photos and prints each metric's distribution and pass rate, so thresholds can be tuned.
-- [ ] **2.5** Add unit tests with fixture images: good, dark, bright, blurry, and low-resolution.
+- [x] **2.1** Add `configService.js`, which loads the active `decision_config` row with a 60 s in-memory cache.
+- [x] **2.2** Build `qualityGate.js`, which computes the five Tier A metrics from Pipeline behavior and returns `{ passed, metrics, reasons, hints }`.
+- [x] **2.3** Wire the gate into the pipeline: save metrics and reasons on `scan_images`; on failure set status `rejected` and return 422 `IMAGE_REJECTED`.
+- [x] **2.4** Write `scripts/gate-calibrate.js`, which runs the gate over a folder of lab photos and prints each metric's distribution and pass rate, so thresholds can be tuned.
+- [x] **2.5** Add unit tests with fixture images: good, dark, bright, blurry, and low-resolution.
 
 **Done when:** each bad fixture is rejected with exactly the expected reason, and the good fixture passes.
 
@@ -717,3 +719,4 @@ Every open decision has a working default, so none of them blocks the build. Whe
 | 2026-10-01 | Inference layout changed to the seams `cv.analyze` and `ml.predict` (`cv/detector.py`, `cv/embedder.py`, `cv/features.py`, `ml/regressor.py`); `pipeline.py`, `base.py`/`stub.py`, `CV_MODEL`, and `ML_MODEL` removed | ML team's layout: teammates replace only function bodies |
 | 2026-10-01 | `inference` may run on any host; new env var `INFERENCE_API_KEY` on both services; `INFERENCE_TIMEOUT_MS` default 30000 → 60000; timeouts are retried once; new Hosting and budget section; Phase 4 rewritten | Only the api must live on Railway (Hobby, $5/month); inference sleeps when idle and has a 10–30 s cold start |
 | 2026-10-01 | Open decisions updated; the iOS client timeout added to Assumptions | Follow-ups from the ML context |
+| 2026-10-01 | Tier A metric keys named (`short_side_px`, `mean_luminance`, `clipped_pct`, `laplacian_var`), thresholds stated as inclusive, and a rejected photo stated to be stored on a `rejected` scan | Phase 2 made them visible to clients in `image.quality.metrics` and the 422; the scan object showed `metrics: {}` |
