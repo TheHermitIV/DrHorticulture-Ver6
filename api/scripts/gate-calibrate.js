@@ -130,7 +130,12 @@ export function report({ folder, results, skipped }, thresholds, source) {
     lines.push('', 'Unreadable photos:', table(rows, 'll'));
   }
   if (skipped.length > 0) {
-    lines.push('', `Skipped ${skipped.length} other files (convert HEIC photos to JPEG first).`);
+    const heic = skipped.some((file) => /\.hei[cf]$/i.test(file));
+    lines.push(
+      '',
+      `Skipped ${skipped.length} files that are not .jpg, .jpeg, or .png.` +
+        (heic ? ' Convert HEIC photos to JPEG first.' : ''),
+    );
   }
   return lines.join('\n');
 }

@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 
@@ -8,6 +10,7 @@ import {
   rejectionMessage,
   runQualityGate,
 } from '../src/services/qualityGate.js';
+import { GATE_FIXTURES } from './fixtures/gate/generate.js';
 import { SEED_CONFIG } from './helpers.js';
 
 const thresholds = SEED_CONFIG.quality;
@@ -129,6 +132,18 @@ describe('runQualityGate', () => {
       reasons: ['blurry'],
       hints: [REJECTIONS.blurry.hint],
     });
+  });
+});
+
+// test/fixtures/gate/: regenerate with node test/fixtures/gate/generate.js.
+describe('Tier A gate fixtures at the v1 thresholds', () => {
+  const cases = Object.entries(GATE_FIXTURES).map(([name, { reasons }]) => [name, reasons]);
+
+  it.each(cases)('%s fails exactly %j', async (name, reasons) => {
+    const photo = await readFile(new URL(`./fixtures/gate/${name}`, import.meta.url));
+    const result = await runQualityGate(photo, thresholds);
+    expect(result.reasons).toEqual(reasons);
+    expect(result.passed).toBe(reasons.length === 0);
   });
 });
 

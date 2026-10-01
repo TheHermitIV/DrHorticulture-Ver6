@@ -63,7 +63,9 @@ describe('gate-calibrate over a folder', () => {
     expect(text).toMatch(/^all checks\s+1\s+50\.0%$/m);
     expect(text).toMatch(/Rejected photos:\n\s+plant-2.dark\.JPG\s+too_dark/);
     expect(text).toMatch(/Unreadable photos:\n\s+broken\.png\s+The photo could not be read/);
-    expect(text).toMatch('Skipped 1 other files');
+    expect(text).toMatch(
+      'Skipped 1 files that are not .jpg, .jpeg, or .png. Convert HEIC photos to JPEG first.',
+    );
   });
 
   it('writes one CSV row per photo', () => {
