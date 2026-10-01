@@ -31,7 +31,11 @@ describe('GET /health', () => {
     const res = await request(
       appWithDb(
         { ok: true },
-        { INFERENCE_MODE: 'remote', INFERENCE_URL: 'http://inference.railway.internal:8000' },
+        {
+          INFERENCE_MODE: 'remote',
+          INFERENCE_URL: 'https://inference.example.com',
+          INFERENCE_API_KEY: 'test-inference-key-0123456789',
+        },
       ),
     ).get('/health');
     expect(res.body.inference_mode).toBe('remote');

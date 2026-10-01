@@ -12,7 +12,7 @@ describe('loadEnv', () => {
       LOG_LEVEL: 'info',
       SUPABASE_BUCKET: 'scan-images',
       INFERENCE_MODE: 'mock',
-      INFERENCE_TIMEOUT_MS: 30000,
+      INFERENCE_TIMEOUT_MS: 60000,
       MAX_UPLOAD_MB: 10,
       CORS_ORIGINS: [],
       RATE_LIMIT_PER_MIN: 30,
@@ -61,29 +61,59 @@ describe('loadEnv', () => {
     ['PORT', 'abc'],
     ['AUTH_REQUIRED', 'yes'],
     ['LOG_LEVEL', 'verbose'],
+    ['INFERENCE_API_KEY', 'too-short'],
   ])('rejects an invalid %s', (name, value) => {
     expect(() => loadEnv({ ...REQUIRED_ENV, [name]: value })).toThrow(name);
   });
 
-  it('requires INFERENCE_URL in remote mode', () => {
-    expect(() => loadEnv({ ...REQUIRED_ENV, INFERENCE_MODE: 'remote' })).toThrow('INFERENCE_URL');
-    const env = loadEnv({
+  it('requires INFERENCE_URL and INFERENCE_API_KEY in remote mode', () => {
+    const remote = {
       ...REQUIRED_ENV,
       INFERENCE_MODE: 'remote',
-      INFERENCE_URL: 'http://inference.railway.internal:8000',
+      INFERENCE_URL: 'https://inference.example.com',
+      INFERENCE_API_KEY: 'test-inference-key-0123456789',
+    };
+    expect(loadEnv(remote)).toMatchObject({
+      INFERENCE_URL: 'https://inference.example.com',
+      INFERENCE_API_KEY: 'test-inference-key-0123456789',
     });
-    expect(env.INFERENCE_URL).toBe('http://inference.railway.internal:8000');
+
+    for (const name of ['INFERENCE_URL', 'INFERENCE_API_KEY']) {
+      const source = { ...remote };
+      delete source[name];
+      expect(() => loadEnv(source)).toThrow(`${name}: is required when INFERENCE_MODE=remote`);
+    }
   });
 
-  it('never includes secret values in the error message', () => {
-    const shortKey = 'tooshort-secret';
+  it('reports every variable missing in remote mode at once', () => {
     let message = '';
     try {
-      loadEnv({ ...REQUIRED_ENV, ADMIN_API_KEY: shortKey });
+      loadEnv({ ...REQUIRED_ENV, INFERENCE_MODE: 'remote' });
     } catch (err) {
       message = err.message;
     }
-    expect(message).toContain('ADMIN_API_KEY');
-    expect(message).not.toContain(shortKey);
+    expect(message).toContain('INFERENCE_URL');
+    expect(message).toContain('INFERENCE_API_KEY');
   });
+
+  it('does not require the inference variables in mock mode', () => {
+    const env = loadEnv(REQUIRED_ENV);
+    expect(env.INFERENCE_URL).toBeUndefined();
+    expect(env.INFERENCE_API_KEY).toBeUndefined();
+  });
+
+  it.each(['ADMIN_API_KEY', 'INFERENCE_API_KEY'])(
+    'never includes the %s value in the error message',
+    (name) => {
+      const shortKey = 'tooshort-secret';
+      let message = '';
+      try {
+        loadEnv({ ...REQUIRED_ENV, [name]: shortKey });
+      } catch (err) {
+        message = err.message;
+      }
+      expect(message).toContain(name);
+      expect(message).not.toContain(shortKey);
+    },
+  );
 });

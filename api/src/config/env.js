@@ -5,6 +5,11 @@ const booleanString = z
   .default('false')
   .transform((value) => value === 'true');
 
+const requiredInRemoteMode = (name) => [
+  (env) => env.INFERENCE_MODE !== 'remote' || Boolean(env[name]),
+  { message: 'is required when INFERENCE_MODE=remote', path: [name] },
+];
+
 const envSchema = z
   .object({
     PORT: z.coerce.number().int().positive().default(3000),
@@ -17,7 +22,8 @@ const envSchema = z
     SUPABASE_BUCKET: z.string().min(1).default('scan-images'),
     INFERENCE_MODE: z.enum(['mock', 'remote']).default('mock'),
     INFERENCE_URL: z.url().optional(),
-    INFERENCE_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
+    INFERENCE_API_KEY: z.string().min(16).optional(),
+    INFERENCE_TIMEOUT_MS: z.coerce.number().int().positive().default(60000),
     MAX_UPLOAD_MB: z.coerce.number().positive().default(10),
     CORS_ORIGINS: z
       .string()
@@ -32,10 +38,8 @@ const envSchema = z
     ADMIN_API_KEY: z.string().min(16),
     AUTH_REQUIRED: booleanString,
   })
-  .refine((env) => env.INFERENCE_MODE !== 'remote' || Boolean(env.INFERENCE_URL), {
-    message: 'is required when INFERENCE_MODE=remote',
-    path: ['INFERENCE_URL'],
-  });
+  .refine(...requiredInRemoteMode('INFERENCE_URL'))
+  .refine(...requiredInRemoteMode('INFERENCE_API_KEY'));
 
 // Messages name the variable and the rule only, never the value, so secrets can't leak into logs.
 export function loadEnv(source) {
