@@ -71,7 +71,7 @@ These span multiple files and are easy to break:
 # api (from api/). npm run dev loads api/.env (copy from .env.example); the server exits 1
 # with a list of invalid variables if env validation fails.
 npm ci
-npm run dev                          # node --watch on PORT (default 3000)
+npm run dev                          # node --watch on PORT (default 3000); upload page at /test.html
 npm test                             # vitest run (all tests)
 npx vitest run test/env.test.js      # one file
 npx vitest run -t "reports ok"       # tests matching a name
@@ -87,7 +87,13 @@ pytest on Python 3.12, on pushes to `Backend`/`main` and PRs to `main`.
 
 ## api structure
 
-`src/server.js` loads env, builds the logger and Supabase client, and calls `createApp({ env, logger, db })`
-from `src/app.js`. Everything the app needs is injected through `createApp`, so tests build the app with
-`testEnv()`, a silent logger, and fake dependencies (see `test/helpers.js`) and never touch Supabase or the
-network. Keep new routes and services injectable the same way.
+`src/server.js` loads env, builds the logger, the Supabase client (`src/db/`, one query module per table),
+and the storage service, and calls `createApp({ env, logger, db, storage })` from `src/app.js`. Everything
+the app needs is injected through `createApp`, so tests build the app with `testEnv()`, a silent logger,
+and the in-memory `fakeDb()` / `fakeStorage()` from `test/helpers.js`, and never touch Supabase or the
+network. Test images are generated in memory by `test/images.js`. Keep new routes and services injectable
+the same way.
+
+`POST /api/v1/scans` runs `middleware/upload.js` (one JPEG/PNG, typed by magic bytes), then
+`services/pipeline.js`: `intake.js` → `storage.js` → rows. Later phases add the quality gate, inference,
+and `decision.js` to the same pipeline.

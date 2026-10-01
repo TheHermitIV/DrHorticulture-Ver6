@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DrHorticulture scan test</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 720px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+      }
+      form {
+        display: grid;
+        gap: 0.75rem;
+      }
+      label {
+        display: grid;
+        gap: 0.25rem;
+      }
+      button {
+        justify-self: start;
+        padding: 0.5rem 1.25rem;
+      }
+      pre {
+        background: #f4f4f4;
+        padding: 1rem;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Scan test</h1>
+    <p>Dev only: posts to <code>POST /api/v1/scans</code> and shows the raw response.</p>
+
+    <form id="scan-form">
+      <label>
+        Photo (JPEG or PNG)
+        <input type="file" name="image" accept="image/jpeg,image/png" required />
+      </label>
+      <label>
+        Species (optional)
+        <input type="text" name="species" maxlength="64" placeholder="geranium" />
+      </label>
+      <button type="submit">Send</button>
+    </form>
+
+    <p id="status"></p>
+    <pre id="output"></pre>
+
+    <script>
+      const form = document.getElementById('scan-form');
+      const status = document.getElementById('status');
+      const output = document.getElementById('output');
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const button = form.querySelector('button');
+        button.disabled = true;
+        status.textContent = 'Uploading…';
+        output.textContent = '';
+        const started = performance.now();
+        try {
+          const res = await fetch('/api/v1/scans', { method: 'POST', body: new FormData(form) });
+          const seconds = ((performance.now() - started) / 1000).toFixed(2);
+          status.textContent = `HTTP ${res.status} in ${seconds} s · request id ${res.headers.get('x-request-id')}`;
+          const text = await res.text();
+          try {
+            output.textContent = JSON.stringify(JSON.parse(text), null, 2);
+          } catch {
+            output.textContent = text;
+          }
+        } catch (err) {
+          status.textContent = `Request failed: ${err.message}`;
+        } finally {
+          button.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>
