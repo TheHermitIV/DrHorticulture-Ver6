@@ -15,8 +15,24 @@ export function testEnv(overrides = {}) {
   return loadEnv({ ...REQUIRED_ENV, ...overrides });
 }
 
+// The v1 seed row from supabase/migrations/0001_init.sql, as the config service returns it.
+export const SEED_CONFIG = Object.freeze({
+  version: 1,
+  ndvi_threshold: 0.5,
+  confidence_min: 0.7,
+  mask_min: 0.8,
+  quality: Object.freeze({
+    min_short_side_px: 1024,
+    luminance_min: 60,
+    luminance_max: 200,
+    clipped_max_pct: 5,
+    blur_min: 100,
+  }),
+});
+
 // In-memory stand-in for src/db/client.js. failOn: 'scans.insert' | 'scanImages.insert'.
-export function fakeDb({ failOn } = {}) {
+// config: the active decision_config row (null for none).
+export function fakeDb({ failOn, config = SEED_CONFIG } = {}) {
   const tables = { scans: [], scan_images: [] };
   const now = () => new Date().toISOString();
   const maybeFail = (query) => {
@@ -56,6 +72,9 @@ export function fakeDb({ failOn } = {}) {
         tables.scan_images.push(saved);
         return saved;
       },
+    },
+    decisionConfig: {
+      getActive: async () => (config ? structuredClone(config) : null),
     },
   };
 }
