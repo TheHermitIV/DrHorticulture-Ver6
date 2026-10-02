@@ -34,7 +34,11 @@
   </head>
   <body>
     <h1>Scan test</h1>
-    <p>Dev only: posts to <code>POST /api/v1/scans</code> and shows the raw response.</p>
+    <p>
+      Dev only: posts to <code>POST /api/v1/scans</code>, or to
+      <code>POST /api/v1/scans/{id}/images</code> when a scan id is given, and shows the raw
+      response.
+    </p>
 
     <form id="scan-form">
       <label>
@@ -44,6 +48,10 @@
       <label>
         Species (optional)
         <input type="text" name="species" maxlength="64" placeholder="geranium" />
+      </label>
+      <label>
+        Retake: add to scan id (optional; the scan keeps its species)
+        <input type="text" name="scan_id" placeholder="a rejected, abstained, or failed scan" />
       </label>
       <label>
         Mock scenario (sent as <code>x-mock-scenario</code>; mock mode only)
@@ -75,9 +83,15 @@
         try {
           const body = new FormData(form);
           const scenario = body.get('scenario');
+          const scanId = body.get('scan_id').trim();
           body.delete('scenario');
+          body.delete('scan_id');
+          if (scanId) body.delete('species');
           const headers = scenario ? { 'x-mock-scenario': scenario } : {};
-          const res = await fetch('/api/v1/scans', { method: 'POST', body, headers });
+          const url = scanId
+            ? `/api/v1/scans/${encodeURIComponent(scanId)}/images`
+            : '/api/v1/scans';
+          const res = await fetch(url, { method: 'POST', body, headers });
           const seconds = ((performance.now() - started) / 1000).toFixed(2);
           status.textContent = `HTTP ${res.status} in ${seconds} s · request id ${res.headers.get('x-request-id')}`;
           const text = await res.text();

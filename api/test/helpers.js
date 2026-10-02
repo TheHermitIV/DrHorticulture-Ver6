@@ -91,8 +91,11 @@ export function fakeDb({ failOn, config = SEED_CONFIG } = {}) {
           .slice(0, limit)
           .map((row) => ({ ...row }));
       },
-      async setStatus(id, status) {
+      async setStatus(id, status, { from } = {}) {
         maybeFail('scans.setStatus');
+        if (from && !from.includes(tables.scans.find((row) => row.id === id)?.status)) {
+          return null;
+        }
         return { ...updateRow('scans', id, { status, updated_at: now() }) };
       },
       async remove(id) {

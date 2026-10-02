@@ -597,7 +597,7 @@ The phases group into modules that can be picked up as units of work. After M0, 
 - [x] **3.4** Build `decision.js` exactly as specified (Tier B included), plus unit tests for every branch and boundary value.
 - [x] **3.5** Finish `pipeline.js`: status `processing` → inference → `decide()` → `analyses` row (versions, latency, raw response) → final status. A failure sets `failed` and returns 503.
 - [x] **3.6** Implement `GET /scans/:id` and `GET /scans` (cursor pagination, newest first, signed image URLs).
-- [ ] **3.7** Implement `POST /scans/:id/images` with the state rules from the API specification.
+- [x] **3.7** Implement `POST /scans/:id/images` with the state rules from the API specification.
 
 **Done when:** in `mock` mode, the test page returns a full scan object with a recommendation, and all four mock scenarios produce the right status.
 

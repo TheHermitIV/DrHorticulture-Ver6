@@ -16,6 +16,16 @@ export function scansRouter({ env, pipeline, reader }) {
     res.status(201).json(scan);
   });
 
+  router.post('/api/v1/scans/:id/images', upload, async (req, res) => {
+    const scan = await pipeline.addImage({
+      scanId: req.params.id,
+      image: req.image,
+      scenario: req.get('x-mock-scenario'),
+      log: req.log,
+    });
+    res.status(201).json(scan);
+  });
+
   router.get('/api/v1/scans', async (req, res) => {
     res.json(await reader.list(req.query));
   });

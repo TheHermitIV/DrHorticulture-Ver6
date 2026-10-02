@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
 import { AppError } from '../errors.js';
+import { isUuid } from './ids.js';
 import { toScanObject } from './scanObject.js';
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // created_at as Postgres returns it, such as 2026-10-01T15:04:05.123456+00:00.
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/;
 
@@ -24,7 +24,7 @@ const encodeCursor = (scan) =>
 function decodeCursor(cursor) {
   try {
     const [createdAt, id] = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
-    if (TIMESTAMP.test(createdAt) && UUID.test(id)) return { created_at: createdAt, id };
+    if (TIMESTAMP.test(createdAt) && isUuid(id)) return { created_at: createdAt, id };
   } catch {
     // falls through to the 400
   }
@@ -72,7 +72,7 @@ export function createScanReader({ db, storage }) {
 
   return {
     async get(id) {
-      const scan = UUID.test(id) ? await db.scans.get(id) : null;
+      const scan = isUuid(id) ? await db.scans.get(id) : null;
       if (!scan) throw notFound();
       const [object] = await toObjects([scan]);
       return object;

@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { AppError } from '../errors.js';
 import { InferenceError } from '../inference/errors.js';
 import { decide } from './decision.js';
+import { isUuid } from './ids.js';
 import { intake } from './intake.js';
 import { REJECTIONS, rejectionMessage, runQualityGate } from './qualityGate.js';
 import { toScanObject } from './scanObject.js';
@@ -28,29 +29,54 @@ function failure(err, scanId) {
   });
 }
 
-// Orchestrates a scan: intake → Tier A gate → store → inference → decide() → analysis.
-export function createPipeline({ db, storage, config, inference }) {
-  // Undo a half-finished upload so no scan is left without its image or vice versa.
-  // Best effort: a cleanup failure is logged, and the original error is what the client sees.
-  async function cleanUp(log, { scanId, path, scanInserted }) {
-    const steps = [() => storage.remove(path)];
-    if (scanInserted) steps.push(() => db.scans.remove(scanId));
-    for (const step of steps) {
-      try {
-        await step();
-      } catch (err) {
-        log.error({ err, storage_path: path }, 'cleanup after a failed upload failed');
-      }
+// Statuses a retake can be added to; processing and completed scans take none.
+export const RETAKE_FROM = Object.freeze(['rejected', 'abstained', 'failed']);
+
+const notFound = () => new AppError('NOT_FOUND', 'Scan not found.');
+const notRetakeable = (status) =>
+  new AppError(
+    'INVALID_STATE',
+    'A photo can only be added to a scan that is rejected, abstained, or failed.',
+    { details: { status } },
+  );
+const busy = () =>
+  new AppError('INVALID_STATE', 'Another photo is already being added to this scan.');
+
+// The scan_images row for a stored photo and its Tier A result.
+const toImageRow = ({ imageId, scanId, path, described, gate }) => ({
+  id: imageId,
+  scan_id: scanId,
+  storage_path: path,
+  mime_type: described.mime,
+  width: described.width,
+  height: described.height,
+  exif: described.exif,
+  quality_passed: gate.passed,
+  quality_metrics: gate.metrics,
+  rejection_reasons: gate.reasons,
+});
+
+// Runs each step even when one fails. A failure is logged; the error the client sees is the
+// one that led here.
+async function bestEffort(log, message, steps) {
+  for (const step of steps) {
+    try {
+      await step();
+    } catch (err) {
+      log.error({ err }, message);
     }
   }
+}
 
+// Orchestrates a scan: intake → Tier A gate → store → inference → decide() → analysis.
+export function createPipeline({ db, storage, config, inference }) {
   // Records a run that failed: an analyses row holding the error, and status 'failed', never
-  // 'abstained'. Best effort, like cleanUp.
+  // 'abstained'.
   async function markFailed(log, { base, err, latencyMs }) {
     const inferenceFailed = err instanceof InferenceError;
     const reason = inferenceFailed ? err.reason : err.message;
     log.error({ image_id: base.image_id, reason, latency_ms: latencyMs }, 'scan failed');
-    const steps = [
+    await bestEffort(log, 'recording the failed scan failed', [
       () =>
         db.analyses.insert({
           ...base,
@@ -59,14 +85,7 @@ export function createPipeline({ db, storage, config, inference }) {
           latency_ms: latencyMs,
         }),
       () => db.scans.setStatus(base.scan_id, 'failed'),
-    ];
-    for (const step of steps) {
-      try {
-        await step();
-      } catch (stepErr) {
-        log.error({ err: stepErr }, 'recording the failed scan failed');
-      }
-    }
+    ]);
   }
 
   // Sends a stored image that passed Tier A to inference, applies decide(), and records the
@@ -99,7 +118,7 @@ export function createPipeline({ db, storage, config, inference }) {
         latency_ms: latencyMs,
       });
       // A Tier B rejection fails the image's quality gate like a Tier A one.
-      const imageRow =
+      const analyzed =
         decision.status === 'rejected'
           ? await db.scanImages.update(image.id, {
               quality_passed: false,
@@ -118,11 +137,28 @@ export function createPipeline({ db, storage, config, inference }) {
         },
         'scan analyzed',
       );
-      return { scan: updated, image: imageRow, analysis, decision };
+      return { scan: updated, image: analyzed, analysis, decision };
     } catch (err) {
       await markFailed(log, { base, err, latencyMs: latencyMs ?? elapsed() });
       throw failure(err, scan.id);
     }
+  }
+
+  // After the photo is stored and its rows written: the 422 when it failed Tier A, else its
+  // analysis.
+  async function finish({ scan, image, gate, cfg, scenario, log }) {
+    if (!gate.passed) {
+      log.info(
+        { image_id: image.id, reasons: gate.reasons, metrics: gate.metrics },
+        'scan rejected by quality gate',
+      );
+      throw rejection(gate.reasons, scan.id);
+    }
+    log.info(
+      { image_id: image.id, storage_path: image.storage_path },
+      'image stored, running inference',
+    );
+    return respond(await analyzeImage({ scan, image, cfg, scenario, log }));
   }
 
   // The scan object for an analyzed image, or the 422 when decide() rejected it (Tier B).
@@ -147,40 +183,58 @@ export function createPipeline({ db, storage, config, inference }) {
       const scanLog = log.child({ scan_id: scanId });
 
       const path = await storage.uploadOriginal({ scanId, imageId, image: described });
-      let scan;
-      let imageRow;
+      let scan = null;
+      let stored;
       try {
         scan = await db.scans.insert({
           id: scanId,
           species,
           status: gate.passed ? 'processing' : 'rejected',
         });
-        imageRow = await db.scanImages.insert({
-          id: imageId,
-          scan_id: scanId,
-          storage_path: path,
-          mime_type: described.mime,
-          width: described.width,
-          height: described.height,
-          exif: described.exif,
-          quality_passed: gate.passed,
-          quality_metrics: gate.metrics,
-          rejection_reasons: gate.reasons,
-        });
+        stored = await db.scanImages.insert(toImageRow({ imageId, scanId, path, described, gate }));
       } catch (err) {
-        await cleanUp(scanLog, { scanId, path, scanInserted: Boolean(scan) });
+        // No scan is left without its image or vice versa.
+        await bestEffort(scanLog, 'cleanup after a failed upload failed', [
+          () => storage.remove(path),
+          ...(scan ? [() => db.scans.remove(scanId)] : []),
+        ]);
         throw err;
       }
+      return finish({ scan, image: stored, gate, cfg, scenario, log: scanLog });
+    },
 
-      if (!gate.passed) {
-        scanLog.info(
-          { image_id: imageId, reasons: gate.reasons, metrics: gate.metrics },
-          'scan rejected by quality gate',
-        );
-        throw rejection(gate.reasons, scanId);
+    // POST /scans/:id/images: a retake, run through the same pipeline as a new scan. The scan
+    // keeps its species and earlier images; its status and result follow the new image.
+    async addImage({ scanId, image, scenario: scenarioHeader, log }) {
+      const scenario = inference.parseScenario(scenarioHeader);
+      const scan = isUuid(scanId) ? await db.scans.get(scanId) : null;
+      if (!scan) throw notFound();
+      if (!RETAKE_FROM.includes(scan.status)) throw notRetakeable(scan.status);
+      const { image: described } = await intake({ image, fields: {} });
+      const cfg = await config.getActive();
+      const gate = await runQualityGate(described.buffer, cfg.quality);
+      const imageId = randomUUID();
+      const scanLog = log.child({ scan_id: scanId });
+
+      const path = await storage.uploadOriginal({ scanId, imageId, image: described });
+      let claimed = null;
+      let stored;
+      try {
+        // Moves the scan on only if it still takes a retake, so two retakes at once can't both
+        // run.
+        claimed = await db.scans.setStatus(scanId, gate.passed ? 'processing' : 'rejected', {
+          from: RETAKE_FROM,
+        });
+        if (!claimed) throw busy();
+        stored = await db.scanImages.insert(toImageRow({ imageId, scanId, path, described, gate }));
+      } catch (err) {
+        await bestEffort(scanLog, 'cleanup after a failed retake failed', [
+          () => storage.remove(path),
+          ...(claimed ? [() => db.scans.setStatus(scanId, scan.status)] : []),
+        ]);
+        throw err;
       }
-      scanLog.info({ image_id: imageId, storage_path: path }, 'scan stored, running inference');
-      return respond(await analyzeImage({ scan, image: imageRow, cfg, scenario, log: scanLog }));
+      return finish({ scan: claimed, image: stored, gate, cfg, scenario, log: scanLog });
     },
   };
 }

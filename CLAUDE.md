@@ -108,6 +108,11 @@ the error in `analyses.error`. In mock mode outside production, the `x-mock-scen
 (`low_confidence`, `no_plant`, `error`) forces each outcome; the mock keeps its own copy of
 `contracts/inference.v1.example.json` because Railway builds the api from `api/` alone.
 
+`POST /api/v1/scans/:id/images` (a retake) runs the same pipeline on a new image in an existing scan,
+which keeps its species and earlier images. Only `rejected`, `abstained`, and `failed` scans take one
+(else 409 `INVALID_STATE`); the claim is a conditional status update (`scans.setStatus(..., { from })`),
+so two retakes at once can't both run.
+
 `GET /api/v1/scans/:id` and `GET /api/v1/scans` (opaque cursor pages, newest first by `created_at` then
 `id`) go through `services/scanReader.js`. A scan object always shows the scan's latest image and that
 image's latest analysis; `result` is set only for `completed` and `abstained` scans.

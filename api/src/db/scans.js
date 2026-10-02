@@ -33,16 +33,18 @@ export function scansQueries(supabase) {
       return unwrap('select from scans', await query);
     },
 
-    // Every status change also sets updated_at; there is no trigger for it.
-    async setStatus(id, status) {
+    // Every status change also sets updated_at; there is no trigger for it. With from, the
+    // change happens only if the scan's status is one of from, in one statement, and null comes
+    // back when it is not.
+    async setStatus(id, status, { from } = {}) {
+      let query = supabase
+        .from('scans')
+        .update({ status, updated_at: new Date().toISOString() })
+        .eq('id', id);
+      if (from) query = query.in('status', from);
       return unwrap(
         'update scans',
-        await supabase
-          .from('scans')
-          .update({ status, updated_at: new Date().toISOString() })
-          .eq('id', id)
-          .select()
-          .single(),
+        await (from ? query.select().maybeSingle() : query.select().single()),
       );
     },
 
