@@ -606,7 +606,7 @@ The phases group into modules that can be picked up as units of work. After M0, 
 
 ### Phase 4 — Inference service stub (end of Sprint 2)
 
-- [ ] **4.1** Build `inference/app.py`: Flask `POST /v1/analyze` (checks `x-inference-key`, validates the request, downloads the image to prove egress works, calls `cv.analyze` then `ml.predict`, returns the v1 response) and `GET /health`. Models load at import time.
+- [x] **4.1** Build `inference/app.py`: Flask `POST /v1/analyze` (checks `x-inference-key`, validates the request, downloads the image to prove egress works, calls `cv.analyze` then `ml.predict`, returns the v1 response) and `GET /health`. Models load at import time.
 - [x] **4.2** Add the seams as stubs with the exact signatures from Inference contract: `cv/__init__.py` (`analyze`), `cv/detector.py`, `cv/embedder.py` (with `SPECIES_LABELS`), `cv/features.py`, `ml/__init__.py` (`predict`), and `ml/regressor.py` (with `ENSEMBLE_SIZE`). Tests check the full response against `contracts/inference.v1.example.json` and a 401 without the key.
 - [ ] **4.3** Add the `Procfile` with gunicorn bound to `[::]:$PORT` and `--workers 1 --threads 4 --timeout 120`, plus `requirements.txt` with pinned versions.
 - [ ] **4.4** Deploy `inference` on the host the team picks (see Hosting and budget), with `INFERENCE_API_KEY` and `MODEL_VERSION` set, over HTTPS if it is public.
