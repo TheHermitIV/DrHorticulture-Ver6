@@ -22,7 +22,7 @@ from werkzeug.exceptions import HTTPException
 
 import cv
 import ml
-from cv.embedder import SPECIES_LABELS
+from cv import embedder
 from ml.regressor import ENSEMBLE_SIZE
 
 DEFAULT_MODEL_VERSION = "stub-0.1"
@@ -122,7 +122,7 @@ def build_response(cv_out, ml_out, model_version):
             "mask_confidence": num(cv_out["mask_confidence"]),
             "leaf_fraction": num(cv_out["leaf_fraction"]),
         },
-        "species": {"top_label": SPECIES_LABELS[top], "top_prob": num(probs[top])},
+        "species": {"top_label": embedder.SPECIES_LABELS[top], "top_prob": num(probs[top])},
         "features": {name: num(value) for name, value in cv_out["features"].items()},
         "estimate": {
             "ndvi": num(ml_out["ndvi"]),

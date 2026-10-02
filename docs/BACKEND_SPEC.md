@@ -68,6 +68,7 @@ The backend is Node.js 24 LTS + Express 5 on Railway, with Supabase for Postgres
 | Job queue (only if needed) | `pg-boss` | Railway `worker` | Only if p95 latency exceeds 15 s (see Action plan) |
 | Inference service | Python 3.12 + Flask + gunicorn, with stub CV and ML stages | Any host (see Hosting and budget) | The ML team may switch to FastAPI; the contract stays the same |
 | Inference image handling | `numpy` + `Pillow` | `inference` | Pillow decodes the downloaded image into the RGB `uint8` array the `cv.analyze` seam takes |
+| CV stage (`CV_ENGINE=plantvision`) | PlantVision (`plantvision/`) with CPU `torch`, `torchvision`, `ultralytics`, `transformers` (`inference/requirements-cv.txt`) | `inference` Docker image | YOLO11n-seg and the OpenPlants species classifier; not needed for the stub or in CI |
 | Database | Supabase Postgres | Supabase | Schema managed with Supabase CLI migrations |
 | File storage | Supabase Storage, private bucket `scan-images` | Supabase | Access only via signed URLs |
 | Auth (optional) | Supabase Auth (JWT) | Supabase | Off by default; see Open decisions |
@@ -415,7 +416,8 @@ def predict(embedding, species_probs) -> dict:
 - `ml/regressor.py`: the ensemble heads → `ndvi`, `ensemble_std`, `confidence`. It also defines `ENSEMBLE_SIZE`, reported as `estimate.ensemble_size`.
 - `app.py` handles HTTP, the key check, request validation, and the image download; calls `cv.analyze`, then `ml.predict`; and assembles the v1 response. `mask` and `embedding` never leave the service.
 - `SPECIES_LABELS` and `ENSEMBLE_SIZE` are `TODO(decision):` additions. The seams return neither the label names nor the head count, and the response needs both.
-- A host builds the service from its own folder, so the stubs keep their own copy of the example values. A test checks the stub service's full response against `contracts/inference.v1.example.json`, so they cannot drift.
+- `CV_ENGINE` picks the CV implementation at import: `stub` (the default; hardcoded values, numpy only) or `plantvision` (the CV files call PlantVision's predictors, built from `inference/Dockerfile` with the repo root as build context). The ML stage is still the stub either way.
+- The stubs keep their own copy of the example values. A test checks the stub service's full response against `contracts/inference.v1.example.json`, so they cannot drift.
 
 The `api` mock adapter returns the example file above, with `model_version` set to `mock-0.1`. For tests it can be forced to return low confidence, no plant, or an error through the `x-mock-scenario` header, which is honored only when `NODE_ENV` is not `production`. An unknown scenario name returns 400 `VALIDATION_ERROR` before anything is stored.
 
@@ -524,13 +526,15 @@ Infrastructure settings live in env vars; product thresholds live in the `decisi
 | `ADMIN_API_KEY` | api | (secret) | Guards the config, ground-truth, and export routes |
 | `AUTH_REQUIRED` | api | `false` | `true` turns on Supabase JWT checks for app routes |
 | `MODEL_VERSION` | inference | `stub-0.1` | Returned in every response |
+| `CV_ENGINE` | inference | `stub` | `stub` or `plantvision`; the Dockerfile sets `plantvision` |
 
 Locally, run the api with `INFERENCE_MODE=mock` so it needs nothing but Supabase. The inference service can also run locally on port 8000, with `INFERENCE_URL=http://localhost:8000` and the same `INFERENCE_API_KEY` on both sides, to test `remote` mode.
 
 ## Hosting and budget
 
 - Only `api` must live on Railway, on the Hobby plan ($5/month, no overage). It runs small and always on.
-- `inference` can run anywhere; the api only knows `INFERENCE_URL`. Options: a Railway service that sleeps when idle, a teammate's laptop behind an ngrok or Cloudflare tunnel, Modal, or Hugging Face Spaces.
+- `inference` runs on Railway as its own service that sleeps when idle, built from `inference/Dockerfile` with the repo root as the build context (config: `inference/railway.json`). The api only knows `INFERENCE_URL`, so the host can still change.
+- The image bakes in PlantVision's YOLO weights and downloads the species classifier (~390 MB) at build time, so a cold start loads models but downloads nothing.
 - `inference` may be reachable from the internet, so it requires the `x-inference-key` header (`INFERENCE_API_KEY`, set on both services). Use `https://` for `INFERENCE_URL` whenever the traffic leaves a private network, so the key and the signed image URL are never sent in clear text.
 - `inference` wakes on an upload and sleeps afterwards. Expect a 10–30 s cold start and under 1 s warm, on CPU with no GPU, and 0.8–1.5 GB of RAM once the models are loaded.
 - Model weights under 50 MB are committed in `inference/weights/`. Larger weights live in a Supabase bucket and are downloaded at startup. `TODO(decision):` how, given that `inference` holds no Supabase keys (see Open decisions).
@@ -691,9 +695,9 @@ Every open decision has a working default, so none of them blocks the build. Whe
 | Showing the predicted species to the client | Product Owner + Team | Not shown. `species.top_label` and `top_prob` are stored in `analyses.raw_response` only; the scan object returns the species the client sent |
 | Species label names and ensemble size | ML team | `cv/embedder.py` defines `SPECIES_LABELS` and `ml/regressor.py` defines `ENSEMBLE_SIZE`, because the seams return neither |
 | Embedding size D, species count K, ensemble form, weight file sizes | ML team | Open; none blocks the backend. Assumed: several heads on one embedding. The stubs use small placeholder sizes |
-| Where `inference` is hosted | Team | Undecided among Railway (sleeping when idle), a tunnel to a laptop, Modal, or Hugging Face Spaces; the api only needs `INFERENCE_URL` and `INFERENCE_API_KEY` |
+| Where `inference` is hosted | Team | Railway, as a separate service that sleeps when idle; the api only needs `INFERENCE_URL` and `INFERENCE_API_KEY` |
 | Downloading large weights | ML team + Backend | Undecided. Weights over 50 MB go in a Supabase bucket, but `inference` holds no Supabase keys; options include a public `model-weights` bucket or a long-lived signed URL in an env var. It must never get the service-role key. Models load at import time, so the host's health check passes only after loading |
-| Packaging PlantVision into `inference` | ML team + Backend | Undecided. A host that builds `inference` from its own folder cannot see `plantvision/`; options include copying the needed code into the seams, a Dockerfile built from the repo root, or publishing PlantVision as a package |
+| Packaging PlantVision into `inference` | ML team + Backend | A Dockerfile built from the repo root installs `plantvision/` (unmodified, editable) into the image; `cv/detector.py`, `cv/embedder.py`, and `cv/features.py` call its predictors when `CV_ENGINE=plantvision`. Until the ML team picks them: `mask_confidence` is the highest detection score, `angle_ok` is always true, and the embedding is a zero placeholder |
 
 **Assumptions**
 
@@ -720,6 +724,7 @@ Every open decision has a working default, so none of them blocks the build. Whe
 | 2026-10-01 | `ground_truth.spad` removed (migration `0003`); ground truth is GreenSeeker NDVI only | ML team: SPAD is not collected |
 | 2026-10-01 | Tier B checks moved into `decide()` as rules 1–2 of one ordered policy; `decide()` now returns `status` and `reason` | The ML team's hard rules list Tier B and the thresholds as one ordered policy |
 | 2026-10-01 | `numpy` and `Pillow` added to the Tech stack for `inference` | The `cv.analyze(image: np.ndarray)` seam needs an RGB array, so the service must decode the downloaded image; PlantVision already uses both |
+| 2026-10-02 | `inference` hosted on Railway; the CV stage wired to PlantVision behind `CV_ENGINE`; `torch`, `torchvision`, `ultralytics`, `transformers` added for that image | The team picked Railway and wants real CV output before the ML model exists. `CV_ENGINE` (unlike the removed `CV_MODEL`) only switches between the stub and PlantVision inside the same seam files, so CI and local development run without torch |
 | 2026-10-01 | Inference layout changed to the seams `cv.analyze` and `ml.predict` (`cv/detector.py`, `cv/embedder.py`, `cv/features.py`, `ml/regressor.py`); `pipeline.py`, `base.py`/`stub.py`, `CV_MODEL`, and `ML_MODEL` removed | ML team's layout: teammates replace only function bodies |
 | 2026-10-01 | `inference` may run on any host; new env var `INFERENCE_API_KEY` on both services; `INFERENCE_TIMEOUT_MS` default 30000 → 60000; timeouts are retried once; new Hosting and budget section; Phase 4 rewritten | Only the api must live on Railway (Hobby, $5/month); inference sleeps when idle and has a 10–30 s cold start |
 | 2026-10-01 | Open decisions updated; the iOS client timeout added to Assumptions | Follow-ups from the ML context |

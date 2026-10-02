@@ -60,6 +60,9 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: inference/requirements*.txt
-      - run: python -m pip install -r requirements-dev.txt
+          cache-dependency-path: |
+            inference/requirements*.txt
+            plantvision/pyproject.toml
+      # PlantVision's core only (no torch): the CV_ENGINE=plantvision tests use fake models.
+      - run: python -m pip install -r requirements-dev.txt -e ../plantvision
       - run: pytest

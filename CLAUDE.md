@@ -21,7 +21,10 @@ a task before starting it. Its agent rules apply:
 The backend builds the *structure* the team will plug models into, not the models. The CV and ML stages of
 the inference service are stubs behind two fixed seams, `cv.analyze(image)` (`inference/cv/`) and
 `ml.predict(embedding, species_probs)` (`inference/ml/`), that return contract-valid hardcoded data;
-teammates replace only the function bodies. Don't implement computer-vision or ML logic.
+teammates replace only the function bodies. Don't implement computer-vision or ML logic. With
+`CV_ENGINE=plantvision` (set by `inference/Dockerfile`, which builds from the repo root for Railway) the CV
+files instead call PlantVision's predictors; the default `stub` keeps tests and CI free of torch. The ML
+stage is a stub either way.
 
 `plantvision/` is the ML team's existing CV pipeline prototype (self-contained Python package with its own
 `CLAUDE.md`, README, and tests). Don't modify it beyond keeping it working inside the monorepo.
