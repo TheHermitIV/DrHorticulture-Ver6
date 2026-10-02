@@ -337,6 +337,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = V7762TR96N;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Dr. Horticulture uses the camera to photograph your plant for analysis.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Dr. Horticulture reads a saved photo of your plant for analysis.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -363,6 +364,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = V7762TR96N;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Dr. Horticulture uses the camera to photograph your plant for analysis.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Dr. Horticulture reads a saved photo of your plant for analysis.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
