@@ -5,8 +5,7 @@ struct DrHorticultureApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
-                // Swap in the real API service here once it exists.
-                .environment(\.analysisService, MockAnalysisService())
+                .environment(\.analysisService, APIAnalysisService())
         }
     }
 }
