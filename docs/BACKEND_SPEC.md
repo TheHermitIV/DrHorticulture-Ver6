@@ -314,7 +314,7 @@ The error shape is shared by every endpoint:
 | 400 | `VALIDATION_ERROR` | Missing or invalid field (for example, a `species` over 64 characters) |
 | 401 | `UNAUTHORIZED` | Bad or missing admin key or JWT |
 | 404 | `NOT_FOUND` | Unknown scan or image id |
-| 409 | `INVALID_STATE` | Adding an image to a scan that is `processing` or `completed` |
+| 409 | `INVALID_STATE` | Adding an image to a scan that is not `rejected`, `abstained`, or `failed` (`details.status` holds its status), or while another image is being added to it |
 | 413 | `PAYLOAD_TOO_LARGE` | File over `MAX_UPLOAD_MB` |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | Not JPEG or PNG; the HEIC message tells the client to send JPEG |
 | 422 | `IMAGE_REJECTED` | Tier A or Tier B quality gate failed; `details` holds the reasons and hints |
@@ -416,7 +416,7 @@ def predict(embedding, species_probs) -> dict:
 - `SPECIES_LABELS` and `ENSEMBLE_SIZE` are `TODO(decision):` additions. The seams return neither the label names nor the head count, and the response needs both.
 - A host builds the service from its own folder, so the stubs keep their own copy of the example values. A test checks the stub service's full response against `contracts/inference.v1.example.json`, so they cannot drift.
 
-The `api` mock adapter returns the example file above, with `model_version` set to `mock-0.1`. For tests it can be forced to return low confidence, no plant, or an error through the `x-mock-scenario` header, which is honored only when `NODE_ENV` is not `production`.
+The `api` mock adapter returns the example file above, with `model_version` set to `mock-0.1`. For tests it can be forced to return low confidence, no plant, or an error through the `x-mock-scenario` header, which is honored only when `NODE_ENV` is not `production`. An unknown scenario name returns 400 `VALIDATION_ERROR` before anything is stored.
 
 ## Pipeline behavior
 
@@ -449,7 +449,7 @@ The metrics are stored in `scan_images.quality_metrics` and returned as `image.q
 - `segmentation.plant_detected = false` → reject with `no_plant_detected` ("Center the plant and fill the frame").
 - Otherwise, `checks.angle_ok = false` → reject with `bad_angle` ("Shoot from above at the angle in the guide").
 - Tier B stops at the first failure, unlike Tier A: with no plant, the angle means nothing. Both checks are the first two rules of `decide()` below.
-- A Tier B rejection still saves the `analyses` row, with `recommendation` null, for later study.
+- A Tier B rejection still saves the `analyses` row, with `recommendation` null, for later study. It also sets `scan_images.quality_passed` to false, so the image reads as rejected like a Tier A failure.
 
 **Decision policy** (`api/src/services/decision.js`, a pure function). The inference service only returns numbers; this function makes every decision. The rules apply in order and the first match wins:
 
@@ -491,9 +491,11 @@ export function decide({ segmentation: s, estimate: e, checks: c }, cfg) {
 
 `abstained` is the model's decision and `failed` is a system problem. They must never be mixed, because abstention rate is an evaluation metric.
 
+Any failure after the photo is stored marks the scan `failed` and saves an `analyses` row holding the error in `analyses.error`. A failed inference call returns 503 `INFERENCE_UNAVAILABLE`, and anything else (a database write, say) returns 500 `INTERNAL_ERROR`. Both carry the `scan_id`, so the client can add a retake.
+
 **Retakes and multiple images**
 
-`POST /scans/:id/images` runs the same pipeline on a new image in the same scan. The scan's status and result always reflect the most recent image. Earlier images and their analyses are kept for the robustness study.
+`POST /scans/:id/images` runs the same pipeline on a new image in the same scan. The scan's status and result always reflect the most recent image. Earlier images and their analyses are kept for the robustness study. The scan keeps the species it was created with; a retake takes no `species` field. The retake claims the scan with a conditional status update, so two retakes sent at once cannot both run: the second gets 409.
 
 **Timeouts and retries**
 
@@ -720,3 +722,4 @@ Every open decision has a working default, so none of them blocks the build. Whe
 | 2026-10-01 | `inference` may run on any host; new env var `INFERENCE_API_KEY` on both services; `INFERENCE_TIMEOUT_MS` default 30000 → 60000; timeouts are retried once; new Hosting and budget section; Phase 4 rewritten | Only the api must live on Railway (Hobby, $5/month); inference sleeps when idle and has a 10–30 s cold start |
 | 2026-10-01 | Open decisions updated; the iOS client timeout added to Assumptions | Follow-ups from the ML context |
 | 2026-10-01 | Tier A metric keys named (`short_side_px`, `mean_luminance`, `clipped_pct`, `laplacian_var`), thresholds stated as inclusive, and a rejected photo stated to be stored on a `rejected` scan | Phase 2 made them visible to clients in `image.quality.metrics` and the 422; the scan object showed `metrics: {}` |
+| 2026-10-01 | 409 `INVALID_STATE` covers every status but `rejected`/`abstained`/`failed` and concurrent retakes; a retake keeps the scan species; a Tier B rejection sets `quality_passed` false; a non-inference failure after storage is 500 with the `scan_id`; an unknown mock scenario is 400 | Phase 3 made these visible to clients |
