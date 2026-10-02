@@ -21,11 +21,19 @@ struct CapturedPhoto: Equatable {
     }
 }
 
+/// `species` is required by `POST /api/v1/scans`, so the user picks one before
+/// the photo is sent.
+enum PlantSpecies {
+    static let options = ["geranium", "basil", "tomato", "pothos", "monstera"]
+    static let fallback = "geranium"
+}
+
 /// The scan in progress. One instance lives for the life of the Scan tab.
 @MainActor
 @Observable
 final class ScanSession {
     var photo: CapturedPhoto?
+    var species: String = PlantSpecies.fallback
 
     var hasPhoto: Bool { photo != nil }
 
@@ -35,6 +43,12 @@ final class ScanSession {
 
     func clear() {
         photo = nil
+    }
+
+    /// Species survives a retake: the plant hasn't changed, only the photo.
+    func reset() {
+        photo = nil
+        species = PlantSpecies.fallback
     }
 }
 

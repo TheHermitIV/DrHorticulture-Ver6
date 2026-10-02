@@ -90,12 +90,23 @@ final class NavigationFlowUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["preview.title"].exists)
     }
 
-    func testSettingsTabShowsTheAbstentionThreshold() {
+    func testSettingsTabSaysThresholdsLiveInTheBackend() {
         let app = launch()
 
         app.tabBars.firstMatch.buttons["Settings"].tap()
 
-        XCTAssertTrue(app.otherElements["settings.threshold"].waitForExistence(timeout: 10)
-            || app.staticTexts["settings.threshold"].waitForExistence(timeout: 10))
+        let note = app.descendants(matching: .any)
+            .matching(identifier: "settings.thresholdNote").firstMatch
+        XCTAssertTrue(note.waitForExistence(timeout: 10))
+    }
+
+    func testScanTabOffersASpeciesPicker() {
+        let app = launch()
+
+        app.tabBars.firstMatch.buttons["Scan"].tap()
+
+        let picker = app.descendants(matching: .any)
+            .matching(identifier: "capture.speciesPicker").firstMatch
+        XCTAssertTrue(picker.waitForExistence(timeout: 10))
     }
 }

@@ -75,4 +75,43 @@ struct ScanSessionTests {
     @Test func rejectsAnImageThatCannotBeEncoded() {
         #expect(CapturedPhoto(image: UIImage(), source: .camera) == nil)
     }
+
+    // MARK: - Species, required by POST /api/v1/scans
+
+    @Test func startsWithAFallbackSpecies() {
+        #expect(ScanSession().species == PlantSpecies.fallback)
+        #expect(PlantSpecies.options.contains(PlantSpecies.fallback))
+    }
+
+    @Test func speciesOptionsAreNonEmptyAndWithinTheColumnLimit() {
+        #expect(!PlantSpecies.options.isEmpty)
+        for name in PlantSpecies.options {
+            #expect(!name.isEmpty)
+            #expect(name.count <= 64)
+        }
+    }
+
+    /// A retake is the same plant, so clearing the photo must not clear the
+    /// species the user already picked.
+    @Test func clearKeepsTheSpecies() throws {
+        let session = ScanSession()
+        session.species = "tomato"
+        session.accept(try #require(CapturedPhoto(image: solidImage(), source: .camera)))
+
+        session.clear()
+
+        #expect(session.photo == nil)
+        #expect(session.species == "tomato")
+    }
+
+    @Test func resetRestoresTheFallbackSpecies() throws {
+        let session = ScanSession()
+        session.species = "tomato"
+        session.accept(try #require(CapturedPhoto(image: solidImage(), source: .camera)))
+
+        session.reset()
+
+        #expect(session.photo == nil)
+        #expect(session.species == PlantSpecies.fallback)
+    }
 }

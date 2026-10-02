@@ -7,12 +7,15 @@ struct SettingsView: View {
             Section("Analysis") {
                 LabeledContent("Source", value: "Mock service")
                     .accessibilityIdentifier("settings.source")
-                LabeledContent(
-                    "Abstention threshold",
-                    value: AbstentionThreshold.minimumConfidence
-                        .formatted(.percent.precision(.fractionLength(0)))
-                )
-                .accessibilityIdentifier("settings.threshold")
+                LabeledContent("Contract", value: "inference v1")
+                    .accessibilityIdentifier("settings.contract")
+            }
+
+            Section {
+                Text("Fertilizer thresholds live in the backend's decision_config and are versioned there, not in the app.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("settings.thresholdNote")
             }
 
             Section("About") {

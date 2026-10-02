@@ -1,15 +1,13 @@
 import Foundation
 
-/// Stands in for the backend so the app runs without it.
-///
-/// The default scenario matches what the pipeline emits today — NDVI
-/// unavailable, so the app abstains — while the other scenarios exercise the
-/// remaining Results states.
+/// Stands in for the backend so the app runs without it. Every payload matches
+/// the scan object in `docs/BACKEND_SPEC.md`.
 struct MockAnalysisService: AnalysisService {
     enum Scenario: String, CaseIterable, Identifiable {
         case fertilize
         case doNotFertilize
         case abstain
+        case rejected
         case failure
 
         var id: String { rawValue }
@@ -19,92 +17,101 @@ struct MockAnalysisService: AnalysisService {
             case .fertilize: return "Fertilize"
             case .doNotFertilize: return "Don't fertilize"
             case .abstain: return "Abstain"
+            case .rejected: return "Rejected"
             case .failure: return "Error"
             }
         }
     }
 
-    var scenario: Scenario = .abstain
+    var scenario: Scenario = .fertilize
 
-    func analyze(imageData: Data?) async throws -> PlantAnalysis {
+    func analyze(imageData: Data, species: String) async throws -> Scan {
         switch scenario {
         case .fertilize:
-            return Self.analysis(ndvi: 0.31, confidence: 0.88, recommendation: "fertilize")
+            return Self.completed(
+                species: species, recommendation: "fertilize", ndvi: 0.41, confidence: 0.82
+            )
         case .doNotFertilize:
-            return Self.analysis(ndvi: 0.72, confidence: 0.91, recommendation: "do_not_fertilize")
+            return Self.completed(
+                species: species, recommendation: "do_not_fertilize", ndvi: 0.72, confidence: 0.9
+            )
         case .abstain:
-            return Self.unavailableAnalysis
+            return Self.abstained(species: species)
+        case .rejected:
+            throw AnalysisError.imageRejected(
+                APIErrorBody(
+                    code: "IMAGE_REJECTED",
+                    message: "Photo is too dark.",
+                    details: APIErrorDetails(
+                        reasons: ["too_dark"],
+                        hints: ["Move to bright, indirect light."]
+                    ),
+                    scanId: Self.scanId,
+                    requestId: Self.requestId
+                )
+            )
         case .failure:
-            throw AnalysisError.requestFailed("Mock failure")
+            throw AnalysisError.api(
+                APIErrorBody(
+                    code: "INFERENCE_UNAVAILABLE",
+                    message: "The analysis service didn't respond.",
+                    requestId: Self.requestId
+                )
+            )
         }
     }
 
     // MARK: - Canned payloads
 
-    /// The shape the pipeline produces right now: a greenness proxy, no NDVI,
-    /// no fertilization call.
-    static let unavailableAnalysis = PlantAnalysis(
-        image: "sample-plant.jpg",
-        segmentation: Segmentation(leafPixels: 12_345, leafCoverage: 0.28, detections: 1),
-        features: sampleFeatures,
-        featureOrder: Array(sampleFeatures.keys).sorted(),
-        greenness: Greenness(
-            value: 105.7,
-            metric: "exg",
-            description: "average excess green (2G - R - B) over leaf pixels, 0-255 scale"
-        ),
-        ndvi: NDVI(
-            status: ResponseStatus.unavailable,
-            reason: "No sensor-trained NDVI model is available yet."
-        ),
-        species: sampleSpecies,
-        fertilization: Fertilization(
-            status: ResponseStatus.unavailable,
-            reason: "A fertilization recommendation requires NDVI."
-        )
-    )
-
-    /// The shape expected once the trained model and the backend's confidence
-    /// score land.
-    static func analysis(
-        ndvi value: Double,
-        confidence: Double,
-        recommendation: String
-    ) -> PlantAnalysis {
-        PlantAnalysis(
-            image: "sample-plant.jpg",
-            segmentation: Segmentation(leafPixels: 12_345, leafCoverage: 0.28, detections: 1),
-            features: sampleFeatures,
-            featureOrder: Array(sampleFeatures.keys).sorted(),
-            greenness: nil,
-            ndvi: NDVI(
-                status: ResponseStatus.available,
-                value: value,
-                model: "xgboost",
-                confidence: confidence
+    static func completed(
+        species: String,
+        recommendation: String,
+        ndvi: Double,
+        confidence: Double
+    ) -> Scan {
+        Scan(
+            scanId: scanId,
+            species: species,
+            status: ScanStatus.completed.rawValue,
+            image: sampleImage,
+            result: AnalysisResult(
+                recommendation: recommendation,
+                ndvi: ndvi,
+                confidence: confidence,
+                abstainReason: nil,
+                modelVersion: "stub-0.1",
+                configVersion: 1
             ),
-            species: sampleSpecies,
-            fertilization: Fertilization(
-                status: ResponseStatus.available,
-                recommendation: recommendation
-            )
+            createdAt: "2026-10-01T15:04:05Z"
         )
     }
 
-    static let sampleFeatures: [String: Double] = [
-        "mean_r": 91.2,
-        "mean_g": 134.5,
-        "mean_b": 72.1,
-        "exg": 105.7,
-        "leaf_coverage": 0.28,
-    ]
+    /// The model declined to call it — distinct from a system failure, because
+    /// abstention rate is an evaluation metric.
+    static func abstained(species: String) -> Scan {
+        Scan(
+            scanId: scanId,
+            species: species,
+            status: ScanStatus.abstained.rawValue,
+            image: sampleImage,
+            result: AnalysisResult(
+                recommendation: "abstain",
+                ndvi: 0.33,
+                confidence: 0.21,
+                abstainReason: "low_confidence",
+                modelVersion: "stub-0.1",
+                configVersion: 1
+            ),
+            createdAt: "2026-10-01T15:04:05Z"
+        )
+    }
 
-    static let sampleSpecies = Species(
-        label: "Monstera deliciosa",
-        confidence: 0.9,
-        topK: [
-            SpeciesCandidate(label: "Monstera deliciosa", confidence: 0.9),
-            SpeciesCandidate(label: "Ficus elastica", confidence: 0.05),
-        ]
+    static let scanId = "00000000-0000-4000-8000-000000000001"
+    static let requestId = "00000000-0000-4000-8000-0000000000ff"
+
+    static let sampleImage = ScanImage(
+        id: "00000000-0000-4000-8000-000000000002",
+        url: "https://example.invalid/signed/sample.jpg",
+        quality: ImageQuality(passed: true, metrics: ["blur": 142.0, "exposure": 0.48])
     )
 }

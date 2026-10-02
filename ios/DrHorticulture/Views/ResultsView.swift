@@ -28,7 +28,7 @@ struct ResultsView: View {
             let model = viewModel ?? ResultsViewModel(service: analysisService)
             model.service = MockAnalysisService(scenario: scenario)
             viewModel = model
-            await model.load(imageData: session.photo?.data)
+            await model.load(imageData: session.photo?.data, species: session.species)
         }
     }
 
@@ -42,12 +42,12 @@ struct ResultsView: View {
                 ReadingCard(ndvi: ndvi, confidence: confidence)
             case .reading(let ndvi, let confidence):
                 ReadingCard(ndvi: ndvi, confidence: confidence)
-            case .abstention(let reason):
-                AbstentionCard(reason: reason, onRetake: retake)
+            case .abstention(let reason, let hints):
+                AbstentionCard(reason: reason, hints: hints, onRetake: retake)
             }
 
         case .failed(let message):
-            AbstentionCard(reason: message, onRetake: retake)
+            AbstentionCard(reason: message, hints: [], onRetake: retake)
 
         case .loading:
             ProgressView()
@@ -125,6 +125,7 @@ struct ReadingCard: View {
 
 struct AbstentionCard: View {
     let reason: String
+    var hints: [String] = []
     let onRetake: () -> Void
 
     var body: some View {
@@ -144,6 +145,19 @@ struct AbstentionCard: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .accessibilityIdentifier("results.abstentionReason")
+
+            // The backend sends retake hints with a rejected photo; showing
+            // them is the difference between "try again" and knowing why.
+            if !hints.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(hints, id: \.self) { hint in
+                        Label(hint, systemImage: "lightbulb")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .accessibilityIdentifier("results.abstentionHints")
+            }
 
             Button("Retake photo", action: onRetake)
                 .buttonStyle(.borderedProminent)

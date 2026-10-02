@@ -35,6 +35,14 @@ struct CaptureView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("capture.viewfinder")
 
+            Picker("Species", selection: Bindable(session).species) {
+                ForEach(PlantSpecies.options, id: \.self) { name in
+                    Text(name.capitalized).tag(name)
+                }
+            }
+            .pickerStyle(.menu)
+            .accessibilityIdentifier("capture.speciesPicker")
+
             if loadFailed {
                 Text("That photo couldn't be loaded. Try another one.")
                     .font(.footnote)

@@ -4,201 +4,160 @@ import Testing
 @testable import DrHorticulture
 
 struct ResultsStateTests {
-    private func analysis(
-        ndviStatus: String? = ResponseStatus.available,
-        ndviValue: Double? = 0.42,
-        confidence: Double? = 0.9,
-        ndviReason: String? = nil,
-        fertilizationStatus: String? = nil,
-        recommendation: String? = nil
-    ) -> PlantAnalysis {
-        PlantAnalysis(
-            ndvi: ndviStatus == nil && ndviValue == nil && confidence == nil && ndviReason == nil
-                ? nil
-                : NDVI(
-                    status: ndviStatus,
-                    value: ndviValue,
-                    reason: ndviReason,
-                    confidence: confidence
-                ),
-            fertilization: fertilizationStatus == nil && recommendation == nil
-                ? nil
-                : Fertilization(status: fertilizationStatus, recommendation: recommendation)
+    private func scan(
+        status: String? = "completed",
+        recommendation: String? = "fertilize",
+        ndvi: Double? = 0.41,
+        confidence: Double? = 0.82,
+        abstainReason: String? = nil,
+        hasResult: Bool = true
+    ) -> Scan {
+        Scan(
+            scanId: "a",
+            species: "geranium",
+            status: status,
+            result: hasResult
+                ? AnalysisResult(
+                    recommendation: recommendation,
+                    ndvi: ndvi,
+                    confidence: confidence,
+                    abstainReason: abstainReason,
+                    modelVersion: "stub-0.1",
+                    configVersion: 1
+                )
+                : nil
         )
     }
 
-    // MARK: - Recommendation state
+    // MARK: - Recommendation
 
     @Test func fertilizeRecommendation() {
-        let state = ResultsState(analysis: analysis(
-            fertilizationStatus: ResponseStatus.available,
-            recommendation: "fertilize"
-        ))
-
-        #expect(state == .recommendation(.fertilize, ndvi: 0.42, confidence: 0.9))
+        #expect(ResultsState(scan: scan()) ==
+            .recommendation(.fertilize, ndvi: 0.41, confidence: 0.82))
     }
 
     @Test func doNotFertilizeRecommendation() {
-        let state = ResultsState(analysis: analysis(
-            fertilizationStatus: ResponseStatus.available,
-            recommendation: "do_not_fertilize"
-        ))
-
-        #expect(state == .recommendation(.doNotFertilize, ndvi: 0.42, confidence: 0.9))
+        #expect(ResultsState(scan: scan(recommendation: "do_not_fertilize")) ==
+            .recommendation(.doNotFertilize, ndvi: 0.41, confidence: 0.82))
     }
+
+    @Test(arguments: ["FERTILIZE", "  fertilize  ", "Fertilize"])
+    func recommendationCasingAndPaddingTolerated(value: String) {
+        #expect(ResultsState(scan: scan(recommendation: value)) ==
+            .recommendation(.fertilize, ndvi: 0.41, confidence: 0.82))
+    }
+
+    /// The backend applies decision_config, so a low confidence paired with a
+    /// real recommendation is still shown — the app must not second-guess it.
+    @Test func lowConfidenceWithARecommendationIsStillShown() {
+        #expect(ResultsState(scan: scan(confidence: 0.05)) ==
+            .recommendation(.fertilize, ndvi: 0.41, confidence: 0.05))
+    }
+
+    // MARK: - Abstention from the backend's own decision
+
+    @Test func abstainRecommendationAbstains() {
+        #expect(ResultsState(scan: scan(recommendation: "abstain", abstainReason: "low_confidence")) ==
+            .abstention(reason: "The reading wasn't confident enough to make a call."))
+    }
+
+    @Test func abstainOnLowMaskConfidence() {
+        let state = ResultsState(
+            scan: scan(recommendation: "abstain", abstainReason: "low_mask_confidence")
+        )
+
+        #expect(state == .abstention(reason: "The plant couldn't be found clearly in the photo."))
+    }
+
+    @Test func abstainWithNoReasonUsesGenericCopy() {
+        #expect(ResultsState(scan: scan(recommendation: "abstain")) ==
+            .abstention(reason: AbstentionReason.generic))
+    }
+
+    /// A reason the app doesn't have copy for is surfaced rather than swallowed.
+    @Test func unknownAbstainReasonIsPassedThrough() {
+        #expect(ResultsState(scan: scan(recommendation: "abstain", abstainReason: "weird_new_reason")) ==
+            .abstention(reason: "weird_new_reason"))
+    }
+
+    // MARK: - Abstention from a missing result
 
     @Test(arguments: [
-        "Fertilize", "  FERTILIZE  ", "yes", "true", "recommended",
+        ("rejected", "That photo didn't pass the quality check."),
+        ("failed", "The analysis didn't finish. Try again."),
+        ("processing", "The analysis is still running."),
+        ("uploaded", "The analysis is still running."),
     ])
-    func fertilizeSynonymsAndCasing(value: String) {
-        let state = ResultsState(analysis: analysis(
-            fertilizationStatus: ResponseStatus.available,
-            recommendation: value
-        ))
-
-        #expect(state == .recommendation(.fertilize, ndvi: 0.42, confidence: 0.9))
+    func missingResultAbstainsWithStatusCopy(status: String, expected: String) {
+        #expect(ResultsState(scan: scan(status: status, hasResult: false)) ==
+            .abstention(reason: expected))
     }
 
-    @Test(arguments: [
-        "DO_NOT_FERTILIZE", "do not fertilize", "no", "false", "not recommended",
-    ])
-    func doNotFertilizeSynonymsAndCasing(value: String) {
-        let state = ResultsState(analysis: analysis(
-            fertilizationStatus: ResponseStatus.available,
-            recommendation: value
-        ))
-
-        #expect(state == .recommendation(.doNotFertilize, ndvi: 0.42, confidence: 0.9))
+    @Test func emptyScanAbstains() {
+        #expect(ResultsState(scan: Scan()) == .abstention(reason: AbstentionReason.generic))
     }
 
-    // MARK: - Reading state
+    // MARK: - Reading
 
-    @Test func readingWhenFertilizationUnavailable() {
-        let state = ResultsState(analysis: analysis(
-            fertilizationStatus: ResponseStatus.unavailable,
-            recommendation: nil
-        ))
-
-        #expect(state == .reading(ndvi: 0.42, confidence: 0.9))
+    @Test func unrecognisedRecommendationFallsBackToTheReading() {
+        #expect(ResultsState(scan: scan(recommendation: "maybe_later")) ==
+            .reading(ndvi: 0.41, confidence: 0.82))
     }
 
-    @Test func readingWhenFertilizationBlockMissing() {
-        #expect(ResultsState(analysis: analysis()) == .reading(ndvi: 0.42, confidence: 0.9))
+    @Test func missingRecommendationFallsBackToTheReading() {
+        #expect(ResultsState(scan: scan(recommendation: nil)) ==
+            .reading(ndvi: 0.41, confidence: 0.82))
     }
 
-    /// An unrecognised recommendation string must not be guessed at — the
-    /// backend's vocabulary isn't fixed yet.
-    @Test func readingWhenRecommendationUnrecognized() {
-        let state = ResultsState(analysis: analysis(
-            fertilizationStatus: ResponseStatus.available,
-            recommendation: "maybe_later"
-        ))
+    // MARK: - Bad numbers
 
-        #expect(state == .reading(ndvi: 0.42, confidence: 0.9))
+    @Test(arguments: [Double.nan, .infinity, -.infinity])
+    func nonFiniteNDVIAbstains(value: Double) {
+        #expect(ResultsState(scan: scan(ndvi: value)) ==
+            .abstention(reason: AbstentionReason.generic))
     }
 
-    @Test func readingWhenRecommendationEmpty() {
-        let state = ResultsState(analysis: analysis(
-            fertilizationStatus: ResponseStatus.available,
-            recommendation: "   "
-        ))
-
-        #expect(state == .reading(ndvi: 0.42, confidence: 0.9))
+    @Test func missingNDVIAbstains() {
+        #expect(ResultsState(scan: scan(ndvi: nil)) ==
+            .abstention(reason: AbstentionReason.generic))
     }
 
-    // MARK: - Abstention: threshold edges
-
-    /// The threshold itself abstains — confidence must be strictly above it.
-    @Test func confidenceExactlyAtThresholdAbstains() {
-        let state = ResultsState(analysis: analysis(confidence: 0.5))
-
-        #expect(state == .abstention(reason: AbstentionReason.lowConfidence))
-    }
-
-    @Test func confidenceJustAboveThresholdIsShown() {
-        let state = ResultsState(analysis: analysis(confidence: 0.5000001))
-
-        #expect(state == .reading(ndvi: 0.42, confidence: 0.5000001))
-    }
-
-    @Test func confidenceJustBelowThresholdAbstains() {
-        #expect(ResultsState(analysis: analysis(confidence: 0.4999999)) ==
-            .abstention(reason: AbstentionReason.lowConfidence))
-    }
-
-    @Test func fullConfidenceIsShown() {
-        #expect(ResultsState(analysis: analysis(confidence: 1.0)) ==
-            .reading(ndvi: 0.42, confidence: 1.0))
-    }
-
-    @Test(arguments: [0.0, -0.3, 1.2, Double.infinity, -Double.infinity, Double.nan])
-    func invalidOrOutOfRangeConfidenceAbstains(confidence: Double) {
-        #expect(ResultsState(analysis: analysis(confidence: confidence)) ==
-            .abstention(reason: AbstentionReason.lowConfidence))
-    }
-
-    /// The field the backend doesn't send yet.
     @Test func missingConfidenceAbstains() {
-        #expect(ResultsState(analysis: analysis(confidence: nil)) ==
-            .abstention(reason: AbstentionReason.lowConfidence))
+        #expect(ResultsState(scan: scan(confidence: nil)) ==
+            .abstention(reason: AbstentionReason.generic))
     }
 
-    // MARK: - Abstention: no usable reading
-
-    @Test func unavailableNDVIAbstainsWithBackendReason() {
-        let state = ResultsState(analysis: analysis(
-            ndviStatus: ResponseStatus.unavailable,
-            ndviValue: nil,
-            confidence: nil,
-            ndviReason: "No sensor-trained NDVI model is available yet."
-        ))
-
-        #expect(state == .abstention(reason: "No sensor-trained NDVI model is available yet."))
+    @Test func nonFiniteConfidenceAbstains() {
+        #expect(ResultsState(scan: scan(confidence: Double.nan)) ==
+            .abstention(reason: AbstentionReason.generic))
     }
 
-    @Test func unavailableNDVIWithoutReasonUsesDefaultCopy() {
-        let state = ResultsState(analysis: analysis(
-            ndviStatus: ResponseStatus.unavailable,
-            ndviValue: nil,
-            confidence: nil
-        ))
+    // MARK: - Rejection
 
-        #expect(state == .abstention(reason: AbstentionReason.noReading))
+    @Test func rejectionCarriesTheBackendsHints() {
+        let body = APIErrorBody(
+            code: "IMAGE_REJECTED",
+            message: "Photo is too dark.",
+            details: APIErrorDetails(reasons: ["too_dark"], hints: ["Move to bright light."])
+        )
+
+        #expect(ResultsState(rejection: body) ==
+            .abstention(reason: "Photo is too dark.", hints: ["Move to bright light."]))
     }
 
-    @Test func missingNDVIBlockAbstains() {
-        let state = ResultsState(analysis: PlantAnalysis())
+    @Test func rejectionWithoutHintsStillAbstains() {
+        let body = APIErrorBody(code: "IMAGE_REJECTED", message: nil, details: nil)
 
-        #expect(state == .abstention(reason: AbstentionReason.noReading))
+        #expect(ResultsState(rejection: body) ==
+            .abstention(reason: "That photo didn't pass the quality check.", hints: []))
     }
 
-    /// Status says available but no number came with it.
-    @Test func availableStatusWithoutValueAbstains() {
-        let state = ResultsState(analysis: analysis(ndviValue: nil))
+    // MARK: - Enum mapping
 
-        #expect(state == .abstention(reason: AbstentionReason.noReading))
-    }
-
-    @Test func nonFiniteNDVIValueAbstains() {
-        #expect(ResultsState(analysis: analysis(ndviValue: Double.nan)) ==
-            .abstention(reason: AbstentionReason.noReading))
-    }
-
-    @Test func unknownStatusAbstains() {
-        #expect(ResultsState(analysis: analysis(ndviStatus: "pending")) ==
-            .abstention(reason: AbstentionReason.noReading))
-    }
-
-    /// The greenness proxy must never be mistaken for a reading.
-    @Test func greennessAloneDoesNotProduceAReading() {
-        var payload = PlantAnalysis()
-        payload.greenness = Greenness(value: 105.7, metric: "exg")
-
-        #expect(ResultsState(analysis: payload) ==
-            .abstention(reason: AbstentionReason.noReading))
-    }
-
-    @Test func thresholdConstantIsHalf() {
-        #expect(AbstentionThreshold.minimumConfidence == 0.5)
+    @Test func recommendationRawValuesMatchTheSchema() {
+        #expect(Recommendation.fertilize.rawValue == "fertilize")
+        #expect(Recommendation.doNotFertilize.rawValue == "do_not_fertilize")
+        // `abstain` is a state, not a Recommendation case.
+        #expect(Recommendation(responseValue: "abstain") == nil)
     }
 }
