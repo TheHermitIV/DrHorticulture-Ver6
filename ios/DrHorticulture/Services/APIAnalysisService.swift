@@ -4,7 +4,7 @@ import Foundation
 /// `species` field and one JPEG in `image`.
 struct APIAnalysisService: AnalysisService {
     // TODO(decision): move to build configuration
-    var baseURL = URL(string: "https://PASTE-YOUR-RAILWAY-DOMAIN")!
+    var baseURL = URL(string: "https://drhorticulture-ver6-production.up.railway.app")!
 
     func analyze(imageData: Data, species: String) async throws -> Scan {
         let boundary = "Boundary-\(UUID().uuidString)"
