@@ -67,6 +67,7 @@ The backend is Node.js 24 LTS + Express 5 on Railway, with Supabase for Postgres
 | Tests | `vitest` + `supertest`; `pytest` for Python | Local + CI | Unit and HTTP integration tests; pytest for `inference/` and `plantvision/` |
 | Job queue (only if needed) | `pg-boss` | Railway `worker` | Only if p95 latency exceeds 15 s (see Action plan) |
 | Inference service | Python 3.12 + Flask + gunicorn, with stub CV and ML stages | Any host (see Hosting and budget) | The ML team may switch to FastAPI; the contract stays the same |
+| Inference image handling | `numpy` + `Pillow` | `inference` | Pillow decodes the downloaded image into the RGB `uint8` array the `cv.analyze` seam takes |
 | Database | Supabase Postgres | Supabase | Schema managed with Supabase CLI migrations |
 | File storage | Supabase Storage, private bucket `scan-images` | Supabase | Access only via signed URLs |
 | Auth (optional) | Supabase Auth (JWT) | Supabase | Off by default; see Open decisions |
@@ -606,7 +607,7 @@ The phases group into modules that can be picked up as units of work. After M0, 
 ### Phase 4 — Inference service stub (end of Sprint 2)
 
 - [ ] **4.1** Build `inference/app.py`: Flask `POST /v1/analyze` (checks `x-inference-key`, validates the request, downloads the image to prove egress works, calls `cv.analyze` then `ml.predict`, returns the v1 response) and `GET /health`. Models load at import time.
-- [ ] **4.2** Add the seams as stubs with the exact signatures from Inference contract: `cv/__init__.py` (`analyze`), `cv/detector.py`, `cv/embedder.py` (with `SPECIES_LABELS`), `cv/features.py`, `ml/__init__.py` (`predict`), and `ml/regressor.py` (with `ENSEMBLE_SIZE`). Tests check the full response against `contracts/inference.v1.example.json` and a 401 without the key.
+- [x] **4.2** Add the seams as stubs with the exact signatures from Inference contract: `cv/__init__.py` (`analyze`), `cv/detector.py`, `cv/embedder.py` (with `SPECIES_LABELS`), `cv/features.py`, `ml/__init__.py` (`predict`), and `ml/regressor.py` (with `ENSEMBLE_SIZE`). Tests check the full response against `contracts/inference.v1.example.json` and a 401 without the key.
 - [ ] **4.3** Add the `Procfile` with gunicorn bound to `[::]:$PORT` and `--workers 1 --threads 4 --timeout 120`, plus `requirements.txt` with pinned versions.
 - [ ] **4.4** Deploy `inference` on the host the team picks (see Hosting and budget), with `INFERENCE_API_KEY` and `MODEL_VERSION` set, over HTTPS if it is public.
 - [ ] **4.5** On the deployed `api`, set `INFERENCE_URL` and `INFERENCE_API_KEY` and flip `INFERENCE_MODE=remote`. Local development stays on `mock`.
@@ -718,6 +719,7 @@ Every open decision has a working default, so none of them blocks the build. Whe
 | 2026-10-01 | `scans.species` nullable and `species` optional in `POST /scans`; sent to inference as a hint | ML team: the models predict species themselves |
 | 2026-10-01 | `ground_truth.spad` removed (migration `0003`); ground truth is GreenSeeker NDVI only | ML team: SPAD is not collected |
 | 2026-10-01 | Tier B checks moved into `decide()` as rules 1–2 of one ordered policy; `decide()` now returns `status` and `reason` | The ML team's hard rules list Tier B and the thresholds as one ordered policy |
+| 2026-10-01 | `numpy` and `Pillow` added to the Tech stack for `inference` | The `cv.analyze(image: np.ndarray)` seam needs an RGB array, so the service must decode the downloaded image; PlantVision already uses both |
 | 2026-10-01 | Inference layout changed to the seams `cv.analyze` and `ml.predict` (`cv/detector.py`, `cv/embedder.py`, `cv/features.py`, `ml/regressor.py`); `pipeline.py`, `base.py`/`stub.py`, `CV_MODEL`, and `ML_MODEL` removed | ML team's layout: teammates replace only function bodies |
 | 2026-10-01 | `inference` may run on any host; new env var `INFERENCE_API_KEY` on both services; `INFERENCE_TIMEOUT_MS` default 30000 → 60000; timeouts are retried once; new Hosting and budget section; Phase 4 rewritten | Only the api must live on Railway (Hobby, $5/month); inference sleeps when idle and has a 10–30 s cold start |
 | 2026-10-01 | Open decisions updated; the iOS client timeout added to Assumptions | Follow-ups from the ML context |

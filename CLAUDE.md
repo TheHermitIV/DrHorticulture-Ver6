@@ -79,12 +79,15 @@ npm run lint
 npm run format                       # Prettier write; CI runs format:check
 npm run gate:calibrate -- <folder>   # Tier A metric distributions + pass rates (reads api/.env)
 
+# inference tests (from inference/; venv with requirements-dev.txt installed)
+.venv/bin/python -m pytest
+
 # PlantVision tests (from plantvision/; see plantvision/CLAUDE.md for setup)
 .venv/Scripts/python -m pytest
 ```
 
-CI (`.github/workflows/ci.yml`) runs the api's lint, format check, and tests on Node 24 and PlantVision's
-pytest on Python 3.12, on pushes to `Backend`/`main` and PRs to `main`.
+CI (`.github/workflows/ci.yml`) runs the api's lint, format check, and tests on Node 24, and the pytest
+suites of `inference/` and PlantVision on Python 3.12, on pushes to `Backend`/`main` and PRs to `main`.
 
 ## api structure
 
