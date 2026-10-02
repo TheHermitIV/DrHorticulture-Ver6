@@ -168,7 +168,11 @@ def create_app(api_key=None, model_version=None, fetch_image=download_image):
         body = build_response(cv_out, ml_out, model_version)
         # Never log image_url: its token grants access to the image.
         log.info(
-            "analyzed image_id=%s latency_ms=%d", image_id, (time.perf_counter() - started) * 1000
+            "analyzed image_id=%s size=%dx%d latency_ms=%d",
+            image_id,
+            image.shape[1],
+            image.shape[0],
+            (time.perf_counter() - started) * 1000,
         )
         return jsonify(body)
 

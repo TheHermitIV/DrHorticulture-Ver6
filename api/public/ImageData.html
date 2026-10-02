@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DrHorticulture image data</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 720px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+      }
+      form {
+        display: grid;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+      }
+      label {
+        display: grid;
+        gap: 0.25rem;
+      }
+      button {
+        justify-self: start;
+        padding: 0.5rem 1.25rem;
+      }
+      img {
+        display: block;
+        max-width: 100%;
+        border: 1px solid #ccc;
+      }
+      dl {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 0.25rem 1rem;
+      }
+      dt {
+        font-weight: 600;
+      }
+      dd {
+        margin: 0;
+      }
+      pre {
+        background: #f4f4f4;
+        padding: 1rem;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Image data</h1>
+    <p>
+      Dev only: uploads a photo through <code>POST /api/v1/scans</code>, or loads a scan by id, then
+      shows the stored image (the file the inference service downloads and feeds to the CV) and
+      whether the scan reached the CV stage. With <code>INFERENCE_MODE=mock</code> the CV is not
+      called; run the api with <code>INFERENCE_MODE=remote</code> against the inference service to
+      check the real path.
+    </p>
+
+    <form id="upload-form">
+      <label>
+        Photo (JPEG or PNG)
+        <input type="file" name="image" accept="image/jpeg,image/png" required />
+      </label>
+      <label>
+        Species (optional)
+        <input type="text" name="species" maxlength="64" placeholder="geranium" />
+      </label>
+      <button type="submit">Upload</button>
+    </form>
+
+    <form id="load-form">
+      <label>
+        Or load an existing scan id
+        <input type="text" name="scan_id" required />
+      </label>
+      <button type="submit">Load</button>
+    </form>
+
+    <p id="status"></p>
+    <dl id="facts" hidden>
+      <dt>Scan</dt>
+      <dd id="scan-id"></dd>
+      <dt>Status</dt>
+      <dd id="scan-status"></dd>
+      <dt>Reached the CV</dt>
+      <dd id="reached-cv"></dd>
+      <dt>Model version</dt>
+      <dd id="model-version"></dd>
+      <dt>Image size</dt>
+      <dd id="image-size"></dd>
+    </dl>
+    <img id="image" alt="The stored scan image" hidden />
+    <pre id="output"></pre>
+
+    <script>
+      const status = document.getElementById('status');
+      const facts = document.getElementById('facts');
+      const image = document.getElementById('image');
+      const output = document.getElementById('output');
+      const field = (id, text) => (document.getElementById(id).textContent = text);
+
+      // Whether inference (and so the CV) ran on the scan's latest image, read from the scan
+      // object. A photo that fails the Tier A gate is stored but never sent to inference.
+      function reachedCv(scan) {
+        if (!scan.image) return 'no: no image stored';
+        if (!scan.image.quality.passed) return 'no: failed the Tier A quality gate';
+        switch (scan.status) {
+          case 'completed':
+          case 'abstained':
+            return 'yes: inference returned a result';
+          case 'rejected':
+            return 'yes: the CV found no plant or a bad angle (Tier B)';
+          case 'failed':
+            return 'unknown: the request failed (see the server logs)';
+          default:
+            return `not yet: status ${scan.status}`;
+        }
+      }
+
+      function reset(message) {
+        status.textContent = message;
+        facts.hidden = true;
+        image.hidden = true;
+        image.removeAttribute('src');
+        output.textContent = '';
+      }
+
+      async function showScan(scanId) {
+        const res = await fetch(`/api/v1/scans/${encodeURIComponent(scanId)}`);
+        const body = await res.json();
+        if (!res.ok) {
+          status.textContent += ` · loading the scan returned HTTP ${res.status}`;
+          output.textContent = JSON.stringify(body, null, 2);
+          return;
+        }
+        field('scan-id', body.scan_id);
+        field('scan-status', body.status);
+        field('reached-cv', reachedCv(body));
+        field('model-version', body.result?.model_version ?? '—');
+        field('image-size', '—');
+        facts.hidden = false;
+        if (body.image?.url) {
+          image.onload = () =>
+            field('image-size', `${image.naturalWidth} × ${image.naturalHeight} px`);
+          image.src = body.image.url;
+          image.hidden = false;
+        }
+        output.textContent = JSON.stringify(body, null, 2);
+      }
+
+      async function run(form, action) {
+        const button = form.querySelector('button');
+        button.disabled = true;
+        try {
+          await action();
+        } catch (err) {
+          status.textContent = `Request failed: ${err.message}`;
+        } finally {
+          button.disabled = false;
+        }
+      }
+
+      document.getElementById('upload-form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        run(form, async () => {
+          reset('Uploading…');
+          const body = new FormData(form);
+          if (!body.get('species').trim()) body.delete('species');
+          const started = performance.now();
+          const res = await fetch('/api/v1/scans', { method: 'POST', body });
+          const seconds = ((performance.now() - started) / 1000).toFixed(2);
+          const json = await res.json();
+          status.textContent = `Upload: HTTP ${res.status} in ${seconds} s`;
+          // A rejected or failed scan is still stored; its id comes back in the error.
+          const scanId = json.scan_id ?? json.error?.scan_id;
+          if (scanId) await showScan(scanId);
+          else output.textContent = JSON.stringify(json, null, 2);
+        });
+      });
+
+      document.getElementById('load-form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        run(form, async () => {
+          reset('Loading…');
+          status.textContent = 'Loaded';
+          await showScan(new FormData(form).get('scan_id').trim());
+        });
+      });
+    </script>
+  </body>
+</html>

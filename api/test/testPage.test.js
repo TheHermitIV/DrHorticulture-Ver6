@@ -20,3 +20,18 @@ describe('GET /test.html', () => {
     expect(res.body.error.code).toBe('NOT_FOUND');
   });
 });
+
+describe('GET /ImageData.html', () => {
+  it.each(['development', 'test'])('serves the image page when NODE_ENV=%s', async (nodeEnv) => {
+    const res = await request(appFor(nodeEnv)).get('/ImageData.html');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/text\/html/);
+    expect(res.text).toContain('/api/v1/scans');
+  });
+
+  it('is not served in production', async () => {
+    const res = await request(appFor('production')).get('/ImageData.html');
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+});
