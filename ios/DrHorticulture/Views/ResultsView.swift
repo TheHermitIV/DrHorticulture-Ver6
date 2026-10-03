@@ -20,13 +20,17 @@ struct ResultsView: View {
 
             Spacer()
 
-            scenarioPicker
+            if analysisService is MockAnalysisService {
+                scenarioPicker
+            }
         }
         .padding(24)
         .navigationTitle("Results")
         .task(id: scenario) {
             let model = viewModel ?? ResultsViewModel(service: analysisService)
-            model.service = MockAnalysisService(scenario: scenario)
+            if analysisService is MockAnalysisService {
+                model.service = MockAnalysisService(scenario: scenario)
+            }
             viewModel = model
             await model.load(imageData: session.photo?.data, species: session.species)
         }
