@@ -4,7 +4,7 @@ name: iOS
 # Actions tab also archives it and uploads the build to TestFlight.
 #
 # TestFlight needs these repository settings (Settings -> Secrets and variables -> Actions):
-#   secrets:   ASC_KEY_P8 (full .p8 text), ASC_KEY_ID, ASC_ISSUER_ID  (App Store Connect API key)
+#   secrets:   ASC_KEY_P8 (.p8 text or base64), ASC_KEY_ID, ASC_ISSUER_ID  (App Store Connect API key)
 #   variables: APPLE_TEAM_ID, IOS_BUNDLE_ID  (override the project's team and bundle ID at build time)
 
 on:
@@ -63,8 +63,20 @@ jobs:
           done
           exit $missing
 
+      # ASC_KEY_P8 may hold the .p8 text or the file as one base64 line (`base64 -w0 AuthKey.p8`),
+      # which survives pasting into the secrets form.
       - name: Write App Store Connect key
-        run: echo "$ASC_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+        run: |
+          key="$RUNNER_TEMP/AuthKey.p8"
+          if printf '%s' "$ASC_KEY_P8" | grep -q 'BEGIN PRIVATE KEY'; then
+            printf '%s\n' "$ASC_KEY_P8" | tr -d '\r' > "$key"
+          else
+            printf '%s' "$ASC_KEY_P8" | tr -d '\r\n ' | base64 --decode > "$key"
+          fi
+          if ! openssl pkey -in "$key" -noout 2>/dev/null; then
+            echo "::error::ASC_KEY_P8 is not a valid .p8 key. Set it to the output of: base64 -w0 AuthKey_<KEY_ID>.p8"
+            exit 1
+          fi
 
       - name: Archive
         run: |
