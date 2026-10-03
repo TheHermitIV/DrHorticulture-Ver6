@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Start here
 
-`docs/BACKEND_SPEC.md` is the build spec for this repo: architecture, data model, API, inference contract,
+`Backend/docs/BACKEND_SPEC.md` is the build spec for this repo: architecture, data model, API, inference contract,
 pipeline rules, and the phased Action plan (grouped into work modules M0–M11). Read the sections relevant to
 a task before starting it. Its agent rules apply:
 
@@ -22,7 +22,7 @@ The backend builds the *structure* the team will plug models into, not the model
 the inference service are stubs behind two fixed seams, `cv.analyze(image)` (`inference/cv/`) and
 `ml.predict(embedding, species_probs)` (`inference/ml/`), that return contract-valid hardcoded data;
 teammates replace only the function bodies. Don't implement computer-vision or ML logic. With
-`CV_ENGINE=plantvision` (set by `inference/Dockerfile`, which builds from the repo root for Railway) the CV
+`CV_ENGINE=plantvision` (set by `Backend/inference/Dockerfile`, which builds from the repo root for Railway) the CV
 files instead call PlantVision's predictors; the default `stub` keeps tests and CI free of torch. The ML
 stage is a stub either way.
 
@@ -37,11 +37,15 @@ integrates `Backend` into the fork's `main`, tests, and then merges into the tea
 
 ## Layout
 
-Monorepo, one folder per service (see the spec's Repository structure for the full tree; folders that
-don't exist yet are created by their Action plan tasks):
+The repo root holds `Backend/` (everything below), `Front-End/` (the iOS app, SwiftUI; built and sent to
+TestFlight by `.github/workflows/ios.yml`), `Assets/`, the README, and `.github/`. Unless a path starts with
+`Backend/` or `Front-End/`, paths in this file are relative to `Backend/`.
 
-- `api/` — Node 24 + Express 5 (ES modules, JavaScript). On Railway (Hobby plan); public; owns every rule
-  and every write.
+`Backend/` is a monorepo, one folder per service (see the spec's Repository structure for the full tree;
+folders that don't exist yet are created by their Action plan tasks):
+
+- `api/` — Node 24 + Express 5 (ES modules, JavaScript). On Railway (Hobby plan, root directory
+  `/Backend/api`); public; owns every rule and every write.
 - `inference/` — Python 3.12 + Flask + gunicorn. Runs on whatever host the team picks (see the spec's
   Hosting and budget); turns an image URL into raw numbers, never decides, never writes data.
 - `contracts/` — `inference.v1.schema.json` + `inference.v1.example.json`, the single source of truth for
@@ -71,7 +75,7 @@ These span multiple files and are easy to break:
 ## Commands
 
 ```bash
-# api (from api/). npm run dev loads api/.env (copy from .env.example); the server exits 1
+# api (from Backend/api/). npm run dev loads api/.env (copy from .env.example); the server exits 1
 # with a list of invalid variables if env validation fails.
 npm ci
 npm run dev                          # node --watch on PORT (default 3000); upload page at /test.html
@@ -82,10 +86,10 @@ npm run lint
 npm run format                       # Prettier write; CI runs format:check
 npm run gate:calibrate -- <folder>   # Tier A metric distributions + pass rates (reads api/.env)
 
-# inference tests (from inference/; venv with requirements-dev.txt installed)
+# inference tests (from Backend/inference/; venv with requirements-dev.txt installed)
 .venv/bin/python -m pytest
 
-# PlantVision tests (from plantvision/; see plantvision/CLAUDE.md for setup)
+# PlantVision tests (from Backend/plantvision/; see plantvision/CLAUDE.md for setup)
 .venv/Scripts/python -m pytest
 ```
 

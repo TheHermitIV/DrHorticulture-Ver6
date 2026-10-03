@@ -1,7 +1,7 @@
 # The inference service with PlantVision's CV models (CV_ENGINE=plantvision).
-# Build context is the repo root, so the image can include plantvision/:
-#   docker build -f inference/Dockerfile .
-# On Railway: root directory "/", config file inference/railway.json.
+# Build context is the repo root, so the image can include Backend/plantvision/:
+#   docker build -f Backend/inference/Dockerfile .
+# On Railway: root directory "/", config file Backend/inference/railway.json.
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -20,18 +20,18 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY inference/requirements.txt inference/requirements-cv.txt inference/
+COPY Backend/inference/requirements.txt Backend/inference/requirements-cv.txt inference/
 RUN pip install -r inference/requirements.txt -r inference/requirements-cv.txt
 
 # Only what the service needs from PlantVision: the package, its configs, and the YOLO weights.
 # Installed editable so its configs/ and models/ paths resolve from /app/plantvision.
-COPY plantvision/pyproject.toml plantvision/README.md plantvision/
-COPY plantvision/src plantvision/src
-COPY plantvision/configs plantvision/configs
-COPY plantvision/models plantvision/models
+COPY Backend/plantvision/pyproject.toml Backend/plantvision/README.md plantvision/
+COPY Backend/plantvision/src plantvision/src
+COPY Backend/plantvision/configs plantvision/configs
+COPY Backend/plantvision/models plantvision/models
 RUN pip install --no-deps -e plantvision
 
-COPY inference/ inference/
+COPY Backend/inference/ inference/
 WORKDIR /app/inference
 
 # Load every model once at build time, which downloads the species classifier (~390 MB) into the

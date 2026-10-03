@@ -108,11 +108,22 @@ The backend owns everything between the photo arriving and the recommendation le
 
 ## Repository structure
 
-The repo is a monorepo with one folder per Railway service. Each service's Railway root directory is its folder. `contracts/` is shared by both services and is the single source of truth for the inference contract. `plantvision/` is the ML team's existing CV pipeline prototype, kept self-contained; it is a candidate implementation for the inference service's CV stage.
+The repo root holds two folders: `Backend/` (everything this doc covers) and `Front-End/` (the iOS app), plus the README, license, `Assets/`, and `.github/workflows/`. Paths in this doc are relative to `Backend/` unless they start with the repo root.
 
 ```
 DrHorticulture-Ver6/
-├─ api/                          # Railway service "api" (root dir: /api)
+├─ Backend/                      # the tree below
+├─ Front-End/                    # iOS app (Xcode project); built by .github/workflows/ios.yml
+├─ Assets/                       # shared images (app icon master)
+├─ .github/workflows/            # ci.yml (backend), ios.yml (iOS + TestFlight)
+└─ README.md, LICENSE
+```
+
+`Backend/` is a monorepo with one folder per Railway service. The api's Railway root directory is `/Backend/api`; inference builds from the repo root (see Hosting and budget). `contracts/` is shared by both services and is the single source of truth for the inference contract. `plantvision/` is the ML team's existing CV pipeline prototype, kept self-contained; it is a candidate implementation for the inference service's CV stage.
+
+```
+Backend/
+├─ api/                          # Railway service "api" (root dir: /Backend/api)
 │  ├─ src/
 │  │  ├─ app.js                  # express app + middleware wiring
 │  │  ├─ server.js               # listens on '::' and PORT
@@ -138,7 +149,7 @@ DrHorticulture-Ver6/
 │  ├─ test/                      # unit + integration tests, fixtures/ images
 │  ├─ package.json
 │  └─ .env.example
-├─ inference/                    # inference service (Railway root dir /inference if hosted there)
+├─ inference/                    # inference service (Railway: built from the repo root, see Hosting)
 │  ├─ app.py                     # Flask: POST /v1/analyze, GET /health; key check, download, assembles response
 │  ├─ cv/                        # CV stage; seam: cv.analyze(image) -> dict
 │  │  ├─ __init__.py             # analyze(): runs detector, embedder, features
@@ -158,7 +169,7 @@ DrHorticulture-Ver6/
 │  └─ inference.v1.example.json  # canonical fake response (used by mock + stub)
 ├─ supabase/migrations/          # SQL migrations (Supabase CLI)
 ├─ docs/BACKEND_SPEC.md          # this doc
-└─ .github/workflows/ci.yml
+└─ package.json                  # Railway CLI (dev dependency)
 ```
 
 ## Data model
@@ -533,7 +544,7 @@ Locally, run the api with `INFERENCE_MODE=mock` so it needs nothing but Supabase
 ## Hosting and budget
 
 - Only `api` must live on Railway, on the Hobby plan ($5/month, no overage). It runs small and always on.
-- `inference` runs on Railway as its own service that sleeps when idle, built from `inference/Dockerfile` with the repo root as the build context (config: `inference/railway.json`). The api only knows `INFERENCE_URL`, so the host can still change.
+- `inference` runs on Railway as its own service that sleeps when idle, built from `Backend/inference/Dockerfile` with the repo root as the build context (config: `Backend/inference/railway.json`). The api only knows `INFERENCE_URL`, so the host can still change.
 - The image bakes in PlantVision's YOLO weights and downloads the species classifier (~390 MB) at build time, so a cold start loads models but downloads nothing.
 - `inference` may be reachable from the internet, so it requires the `x-inference-key` header (`INFERENCE_API_KEY`, set on both services). Use `https://` for `INFERENCE_URL` whenever the traffic leaves a private network, so the key and the signed image URL are never sent in clear text.
 - `inference` wakes on an upload and sleeps afterwards. Expect a 10–30 s cold start and under 1 s warm, on CPU with no GPU, and 0.8–1.5 GB of RAM once the models are loaded.
@@ -730,3 +741,4 @@ Every open decision has a working default, so none of them blocks the build. Whe
 | 2026-10-01 | Open decisions updated; the iOS client timeout added to Assumptions | Follow-ups from the ML context |
 | 2026-10-01 | Tier A metric keys named (`short_side_px`, `mean_luminance`, `clipped_pct`, `laplacian_var`), thresholds stated as inclusive, and a rejected photo stated to be stored on a `rejected` scan | Phase 2 made them visible to clients in `image.quality.metrics` and the 422; the scan object showed `metrics: {}` |
 | 2026-10-01 | 409 `INVALID_STATE` covers every status but `rejected`/`abstained`/`failed` and concurrent retakes; a retake keeps the scan species; a Tier B rejection sets `quality_passed` false; a non-inference failure after storage is 500 with the `scan_id`; an unknown mock scenario is 400 | Phase 3 made these visible to clients |
+| 2026-10-03 | Backend files moved under `Backend/`; the iOS app (`ios/`) renamed `Front-End/`; the README, license, `Assets/`, and `.github/` stay at the repo root. The api's Railway root directory becomes `/Backend/api`, and inference's config file `Backend/inference/railway.json` | Owner's restructure: one folder per side of the product at the root. Paths inside `Backend/` are unchanged |

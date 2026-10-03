@@ -1,6 +1,6 @@
 name: iOS
 
-# Builds the app in ios/ and runs its unit tests on every iOS change; "Run workflow" on the
+# Builds the app in Front-End/ and runs its unit tests on every iOS change; "Run workflow" on the
 # Actions tab also archives it and uploads the build to TestFlight.
 #
 # TestFlight needs these repository settings (Settings -> Secrets and variables -> Actions):
@@ -10,10 +10,10 @@ name: iOS
 on:
   push:
     branches: [main]
-    paths: ['ios/**', '.github/workflows/ios.yml']
+    paths: ['Front-End/**', '.github/workflows/ios.yml']
   pull_request:
     branches: [main]
-    paths: ['ios/**']
+    paths: ['Front-End/**']
   workflow_dispatch:
 
 jobs:
@@ -22,7 +22,7 @@ jobs:
     runs-on: macos-26
     defaults:
       run:
-        working-directory: ios
+        working-directory: Front-End
     steps:
       - uses: actions/checkout@v4
 
@@ -45,7 +45,7 @@ jobs:
     runs-on: macos-26
     defaults:
       run:
-        working-directory: ios
+        working-directory: Front-End
     env:
       ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
     steps:
