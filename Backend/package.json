@@ -1,0 +1,5 @@
+{
+  "devDependencies": {
+    "@railway/cli": "^5.63.1"
+  }
+}

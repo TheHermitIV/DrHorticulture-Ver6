@@ -1,0 +1,8 @@
+# CV_ENGINE=plantvision only (the Docker image); not needed for the stub, tests, or CI.
+# PlantVision itself is installed from ../plantvision. CPU-only torch: the CUDA build is GBs larger.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.14.1+cpu
+torchvision==0.29.1+cpu
+ultralytics==8.4.171
+transformers==5.18.0
+PyYAML==6.0.3

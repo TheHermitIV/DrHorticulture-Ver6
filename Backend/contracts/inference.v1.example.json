@@ -1,0 +1,8 @@
+{
+  "model_version": "stub-0.1",
+  "segmentation": { "plant_detected": true, "mask_confidence": 0.91, "leaf_fraction": 0.42 },
+  "species": { "top_label": "geranium", "top_prob": 0.83 },
+  "features": { "vari": 0.12, "exg": 0.31, "gli": 0.18, "ngrdi": 0.09 },
+  "estimate": { "ndvi": 0.62, "confidence": 0.78, "ensemble_std": 0.04, "ensemble_size": 5 },
+  "checks": { "angle_ok": true }
+}

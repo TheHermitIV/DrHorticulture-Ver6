@@ -1,7 +1,0 @@
-{
-  "model_version": "stub-0.1",
-  "segmentation": { "plant_detected": true, "mask_confidence": 0.84, "leaf_fraction": 0.31 },
-  "features": { "vari": 0.12, "exg": 41.2, "gli": 0.09, "ngrdi": 0.07 },
-  "estimate": { "ndvi": 0.62, "confidence": 0.78 },
-  "checks": { "angle_ok": true, "calibration_card": false }
-}
