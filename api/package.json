@@ -16,7 +16,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "gate:calibrate": "node --env-file-if-exists=.env scripts/gate-calibrate.js"
+    "gate:calibrate": "node --env-file-if-exists=.env scripts/gate-calibrate.js",
+    "scans:purge": "node --env-file-if-exists=.env scripts/purge-scans.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.117.2",

@@ -48,18 +48,27 @@ jobs:
         working-directory: ios
     env:
       ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
-      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-      TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
-      BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID }}
     steps:
       - uses: actions/checkout@v4
 
+      # Values pasted into the settings forms can carry stray spaces or line breaks, so the
+      # single-line ones are trimmed here and exported for the later steps.
       - name: Check settings
+        env:
+          RAW_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          RAW_ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          RAW_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          RAW_BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID }}
         run: |
           missing=0
-          for name in ASC_KEY_P8 ASC_KEY_ID ASC_ISSUER_ID TEAM_ID BUNDLE_ID; do
-            if [ -z "${!name}" ]; then echo "::error::$name is not set"; missing=1; fi
+          [ -n "$(printf '%s' "$ASC_KEY_P8" | tr -d '[:space:]')" ] \
+            || { echo "::error::ASC_KEY_P8 is not set"; missing=1; }
+          for name in ASC_KEY_ID ASC_ISSUER_ID TEAM_ID BUNDLE_ID; do
+            raw="RAW_$name"
+            value=$(printf '%s' "${!raw}" | tr -d '[:space:]')
+            if [ -z "$value" ]; then echo "::error::$name is not set"; missing=1; fi
+            case $name in ASC_*) [ -n "$value" ] && echo "::add-mask::$value" ;; esac
+            echo "$name=$value" >> "$GITHUB_ENV"
           done
           exit $missing
 
