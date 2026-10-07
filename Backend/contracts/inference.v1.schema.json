@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DrHorticulture inference contract v1",
+  "description": "POST /v1/analyze between the api and the inference service, sent with the header x-inference-key: <INFERENCE_API_KEY>. v1 was revised in place on 2026-10-01, before any inference service was live; once one is live, v1 is frozen and a breaking change becomes /v2/analyze with contracts/inference.v2.*.",
+  "$defs": {
+    "AnalyzeRequest": {
+      "description": "Request body, api -> inference.",
+      "type": "object",
+      "required": ["image_url", "image_id", "species_hint"],
+      "properties": {
+        "image_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Supabase signed URL, valid 5 minutes. The service downloads the image itself."
+        },
+        "image_id": { "type": "string", "format": "uuid" },
+        "species_hint": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Species the client sent (trimmed, lowercased), or null. A hint only."
+        }
+      }
+    },
+    "AnalyzeResponse": {
+      "description": "200 response body, inference -> api. Raw numbers only: the service never decides fertilize or abstain. The api treats a body that fails this schema as a failure and stores the full body in analyses.raw_response.",
+      "type": "object",
+      "required": ["model_version", "segmentation", "species", "features", "estimate", "checks"],
+      "properties": {
+        "model_version": { "type": "string", "minLength": 1 },
+        "segmentation": {
+          "description": "CV stage: YOLO-seg canopy mask, with petals, pot, and soil masked out.",
+          "type": "object",
+          "required": ["plant_detected", "mask_confidence", "leaf_fraction"],
+          "properties": {
+            "plant_detected": { "type": "boolean" },
+            "mask_confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+            "leaf_fraction": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        "species": {
+          "description": "CV stage: top class of the pretrained species classifier.",
+          "type": "object",
+          "required": ["top_label", "top_prob"],
+          "properties": {
+            "top_label": { "type": "string", "minLength": 1 },
+            "top_prob": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        "features": {
+          "description": "CV stage: color indices (for example VARI, ExG, GLI, NGRDI) on masked canopy pixels. Any keys; numeric values with no range, since some indices are negative; may be empty.",
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        },
+        "estimate": {
+          "description": "ML stage: ensemble of regression heads on the embedding plus species probabilities.",
+          "type": "object",
+          "required": ["ndvi", "confidence", "ensemble_std", "ensemble_size"],
+          "properties": {
+            "ndvi": {
+              "type": "number",
+              "minimum": -1,
+              "maximum": 1,
+              "description": "Mean of the ensemble heads. GreenSeeker ground truth is 0.00-0.99."
+            },
+            "confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Derived from the ensemble spread by the service; the api never recomputes it."
+            },
+            "ensemble_std": { "type": "number", "minimum": 0 },
+            "ensemble_size": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "checks": {
+          "type": "object",
+          "required": ["angle_ok"],
+          "properties": {
+            "angle_ok": { "type": "boolean" },
+            "calibration_card": {
+              "type": "boolean",
+              "description": "Recorded only, not enforced. Optional: no CV function produces it yet."
+            }
+          }
+        }
+      }
+    },
+    "ErrorResponse": {
+      "description": "Any 4xx/5xx body from the inference service, including 401 for a missing or wrong x-inference-key.",
+      "type": "object",
+      "required": ["error"],
+      "properties": {
+        "error": {
+          "type": "object",
+          "required": ["code", "message"],
+          "properties": {
+            "code": { "type": "string" },
+            "message": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Start here
 
-`docs/BACKEND_SPEC.md` is the build spec for this repo: architecture, data model, API, inference contract,
+`Backend/docs/BACKEND_SPEC.md` is the build spec for this repo: architecture, data model, API, inference contract,
 pipeline rules, and the phased Action plan (grouped into work modules M0–M11). Read the sections relevant to
 a task before starting it. Its agent rules apply:
 
@@ -19,8 +19,12 @@ a task before starting it. Its agent rules apply:
 ## Scope
 
 The backend builds the *structure* the team will plug models into, not the models. The CV and ML stages of
-the inference service are stubs that return contract-valid data (`inference/cv/`, `inference/ml/`, selected
-by `CV_MODEL` / `ML_MODEL`). Don't implement computer-vision or ML logic.
+the inference service are stubs behind two fixed seams, `cv.analyze(image)` (`inference/cv/`) and
+`ml.predict(embedding, species_probs)` (`inference/ml/`), that return contract-valid hardcoded data;
+teammates replace only the function bodies. Don't implement computer-vision or ML logic. With
+`CV_ENGINE=plantvision` (set by `Backend/inference/Dockerfile`, which builds from the repo root for Railway) the CV
+files instead call PlantVision's predictors; the default `stub` keeps tests and CI free of torch. The ML
+stage is a stub either way.
 
 `plantvision/` is the ML team's existing CV pipeline prototype (self-contained Python package with its own
 `CLAUDE.md`, README, and tests). Don't modify it beyond keeping it working inside the monorepo.
@@ -33,13 +37,20 @@ integrates `Backend` into the fork's `main`, tests, and then merges into the tea
 
 ## Layout
 
-Monorepo, one folder per Railway service (see the spec's Repository structure for the full tree; folders
-that don't exist yet are created by their Action plan tasks):
+The repo root holds `Backend/` (everything below), `Front-End/` (the iOS app, SwiftUI; built and sent to
+TestFlight by `.github/workflows/ios.yml`), `Assets/`, the README, and `.github/`. Unless a path starts with
+`Backend/` or `Front-End/`, paths in this file are relative to `Backend/`.
 
-- `api/` — Node 24 + Express 5 (ES modules, JavaScript). Public; owns every rule and every write.
-- `inference/` — Python 3.12 + Flask + gunicorn. Private; turns an image URL into numbers, never writes data.
+`Backend/` is a monorepo, one folder per service (see the spec's Repository structure for the full tree;
+folders that don't exist yet are created by their Action plan tasks):
+
+- `api/` — Node 24 + Express 5 (ES modules, JavaScript). On Railway (Hobby plan, root directory
+  `/Backend/api`); public; owns every rule and every write.
+- `inference/` — Python 3.12 + Flask + gunicorn. Runs on whatever host the team picks (see the spec's
+  Hosting and budget); turns an image URL into raw numbers, never decides, never writes data.
 - `contracts/` — `inference.v1.schema.json` + `inference.v1.example.json`, the single source of truth for
-  the api ↔ inference boundary. v1 is never changed in place; breaking changes become v2.
+  the api ↔ inference boundary. v1 was revised in place on 2026-10-01 because no inference service was
+  live; once one is, v1 is frozen and breaking changes become v2.
 - `supabase/migrations/` — Postgres schema (Supabase CLI).
 - `plantvision/` — ML team's CV prototype (see above).
 
@@ -48,7 +59,8 @@ that don't exist yet are created by their Action plan tasks):
 These span multiple files and are easy to break:
 
 - Product thresholds (NDVI, confidence, mask, Tier A quality gate) come from the active `decision_config`
-  row, never from code or env vars.
+  row, never from code or env vars. Inference returns raw numbers only; `api/src/services/decision.js`
+  makes every decision (Tier B rejections, abstentions, and the recommendation).
 - `abstained` (model not confident) and `failed` (system error) scan statuses must never be conflated —
   abstention rate is an evaluation metric.
 - All api errors go through `AppError` and the shared error shape; route handlers stay thin, logic lives
@@ -56,31 +68,61 @@ These span multiple files and are easy to break:
 - The stored image is the untouched original; GPS EXIF is never stored; the bucket is private and clients
   only get signed URLs.
 - Inference responses are schema-validated by the api before use; the mock adapter, the inference stubs,
-  and `contracts/inference.v1.example.json` must stay in sync (a contract test enforces this).
+  and `contracts/inference.v1.example.json` must stay in sync (a contract test enforces this). Every call
+  to inference carries `x-inference-key`; inference never gets Supabase keys.
+- Applied migrations in `supabase/migrations/` are never edited; schema changes go in a new numbered file.
 
 ## Commands
 
 ```bash
-# api (from api/). npm run dev loads api/.env (copy from .env.example); the server exits 1
+# api (from Backend/api/). npm run dev loads api/.env (copy from .env.example); the server exits 1
 # with a list of invalid variables if env validation fails.
 npm ci
-npm run dev                          # node --watch on PORT (default 3000)
+npm run dev                          # node --watch on PORT (default 3000); upload page at /test.html
 npm test                             # vitest run (all tests)
 npx vitest run test/env.test.js      # one file
 npx vitest run -t "reports ok"       # tests matching a name
 npm run lint
 npm run format                       # Prettier write; CI runs format:check
+npm run gate:calibrate -- <folder>   # Tier A metric distributions + pass rates (reads api/.env)
 
-# PlantVision tests (from plantvision/; see plantvision/CLAUDE.md for setup)
+# inference tests (from Backend/inference/; venv with requirements-dev.txt installed)
+.venv/bin/python -m pytest
+
+# PlantVision tests (from Backend/plantvision/; see plantvision/CLAUDE.md for setup)
 .venv/Scripts/python -m pytest
 ```
 
-CI (`.github/workflows/ci.yml`) runs the api's lint, format check, and tests on Node 24 and PlantVision's
-pytest on Python 3.12, on pushes to `Backend`/`main` and PRs to `main`.
+CI (`.github/workflows/ci.yml`) runs the api's lint, format check, and tests on Node 24, and the pytest
+suites of `inference/` and PlantVision on Python 3.12, on pushes to `Backend`/`main` and PRs to `main`.
 
 ## api structure
 
-`src/server.js` loads env, builds the logger and Supabase client, and calls `createApp({ env, logger, db })`
-from `src/app.js`. Everything the app needs is injected through `createApp`, so tests build the app with
-`testEnv()`, a silent logger, and fake dependencies (see `test/helpers.js`) and never touch Supabase or the
-network. Keep new routes and services injectable the same way.
+`src/server.js` loads env, builds the logger, the Supabase client (`src/db/`, one query module per table),
+and the storage service, and calls `createApp({ env, logger, db, storage })` from `src/app.js`, which also
+builds the inference adapter for `INFERENCE_MODE` (`src/inference/index.js`: `mock.js` or `remote.js`)
+unless one is passed in. Everything the app needs is injected through `createApp`, so tests build the app
+with `testEnv()`, a silent logger, and the in-memory `fakeDb()` / `fakeStorage()` from `test/helpers.js`,
+and never touch Supabase or the network. `fakeDb()` serves the v1 seed `decision_config` (`SEED_CONFIG`)
+unless given another. Test images are generated in memory by `test/images.js`: `makeImage()` is a tiny
+solid image that fails the quality gate, `makePhoto()` a leaf scene that passes it. Keep new routes and
+services injectable the same way.
+
+`POST /api/v1/scans` runs `middleware/upload.js` (one JPEG/PNG, typed by magic bytes), then
+`services/pipeline.js`: `intake.js` → `qualityGate.js` (Tier A, thresholds from `configService.js`) →
+`storage.js` → rows → inference → `decision.js` → an `analyses` row → the final status. A photo that fails
+Tier A is still stored, on a `rejected` scan, and the request returns 422 `IMAGE_REJECTED` with that
+`scan_id`; a Tier B rejection from `decide()` does the same after recording the analysis. Any failure
+after storage marks the scan `failed` (503 `INFERENCE_UNAVAILABLE` for inference, else 500) and records
+the error in `analyses.error`. In mock mode outside production, the `x-mock-scenario` header
+(`low_confidence`, `no_plant`, `error`) forces each outcome; the mock keeps its own copy of
+`contracts/inference.v1.example.json` because Railway builds the api from `api/` alone.
+
+`POST /api/v1/scans/:id/images` (a retake) runs the same pipeline on a new image in an existing scan,
+which keeps its species and earlier images. Only `rejected`, `abstained`, and `failed` scans take one
+(else 409 `INVALID_STATE`); the claim is a conditional status update (`scans.setStatus(..., { from })`),
+so two retakes at once can't both run.
+
+`GET /api/v1/scans/:id` and `GET /api/v1/scans` (opaque cursor pages, newest first by `created_at` then
+`id`) go through `services/scanReader.js`. A scan object always shows the scan's latest image and that
+image's latest analysis; `result` is set only for `completed` and `abstained` scans.
