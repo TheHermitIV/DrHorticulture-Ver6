@@ -4,8 +4,7 @@ import XCTest
 final class NavigationFlowUITests: XCTestCase {
     private func launch() -> XCUIApplication {
         continueAfterFailure = false
-        let app = XCUIApplication()
-        app.launch()
+        let app = XCUIApplication.launchSignedIn()
         return app
     }
 
