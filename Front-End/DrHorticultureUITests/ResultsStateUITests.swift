@@ -6,8 +6,7 @@ import XCTest
 final class ResultsStateUITests: XCTestCase {
     private func launchToResults() -> XCUIApplication {
         continueAfterFailure = false
-        let app = XCUIApplication()
-        app.launch()
+        let app = XCUIApplication.launchSignedIn()
         app.tabBars.firstMatch.buttons["Scan"].tap()
         app.buttons["capture.sampleButton"].tap()
         app.buttons["preview.acceptButton"].tap()

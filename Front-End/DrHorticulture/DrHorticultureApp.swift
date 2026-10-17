@@ -2,10 +2,31 @@ import SwiftUI
 
 @main
 struct DrHorticultureApp: App {
+    @State private var auth = AuthSession()
+    @AppStorage(AppTheme.storageKey) private var theme: AppTheme = .system
+
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environment(\.analysisService, APIAnalysisService())
+            Group {
+                if auth.isSignedIn {
+                    RootView()
+                } else {
+                    LoginView()
+                }
+            }
+            .environment(auth)
+            .preferredColorScheme(theme.colorScheme)
+            .tint(.brand)
+            .environment(
+                \.analysisService,
+                APIConfig.usesMockServices
+                    ? MockAnalysisService() as any AnalysisService : APIAnalysisService()
+            )
+            .environment(
+                \.authService,
+                APIConfig.usesMockServices
+                    ? MockAuthService() as any AuthService : APIAuthService()
+            )
         }
     }
 }

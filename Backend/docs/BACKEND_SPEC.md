@@ -277,6 +277,7 @@ All endpoints live under `/api/v1` except `/health`, return JSON, and share one 
 | Method | Path | Access | Request | Success |
 | --- | --- | --- | --- | --- |
 | GET | `/health` | Public | — | 200 `{ status, db, inference_mode }` |
+| POST | `/api/v1/auth/login` | Public | JSON: `username`, `password` | 200 `{ username }`; 401 `UNAUTHORIZED` if they don't match `LOGIN_USERNAME`/`LOGIN_PASSWORD`, 400 `VALIDATION_ERROR` if either is missing |
 | POST | `/api/v1/scans` | App | multipart: `image` (JPEG/PNG, ≤ 10 MB), `species` (optional text) | 201 with the scan object (below) |
 | POST | `/api/v1/scans/:id/images` | App | multipart: `image` | 201 with the scan object; allowed when status is `rejected`, `abstained`, or `failed` |
 | GET | `/api/v1/scans/:id` | App | — | 200 scan object with its latest analysis |
@@ -325,7 +326,7 @@ The error shape is shared by every endpoint:
 | HTTP | code | When |
 | --- | --- | --- |
 | 400 | `VALIDATION_ERROR` | Missing or invalid field (for example, a `species` over 64 characters) |
-| 401 | `UNAUTHORIZED` | Bad or missing admin key or JWT |
+| 401 | `UNAUTHORIZED` | Bad or missing admin key or JWT, or a wrong login |
 | 404 | `NOT_FOUND` | Unknown scan or image id |
 | 409 | `INVALID_STATE` | Adding an image to a scan that is not `rejected`, `abstained`, or `failed` (`details.status` holds its status), or while another image is being added to it |
 | 413 | `PAYLOAD_TOO_LARGE` | File over `MAX_UPLOAD_MB` |
@@ -536,6 +537,8 @@ Infrastructure settings live in env vars; product thresholds live in the `decisi
 | `RATE_LIMIT_PER_MIN` | api | `30` | Per IP, on `POST` scan routes |
 | `ADMIN_API_KEY` | api | (secret) | Guards the config, ground-truth, and export routes |
 | `AUTH_REQUIRED` | api | `false` | `true` turns on Supabase JWT checks for app routes |
+| `LOGIN_USERNAME` | api | `admin` | The one account the app's login screen accepts; unset refuses every login |
+| `LOGIN_PASSWORD` | api | (secret) | Its password; never logged or sent to clients |
 | `MODEL_VERSION` | inference | `stub-0.1` | Returned in every response |
 | `CV_ENGINE` | inference | `stub` | `stub` or `plantvision`; the Dockerfile sets `plantvision` |
 
@@ -742,3 +745,4 @@ Every open decision has a working default, so none of them blocks the build. Whe
 | 2026-10-01 | Tier A metric keys named (`short_side_px`, `mean_luminance`, `clipped_pct`, `laplacian_var`), thresholds stated as inclusive, and a rejected photo stated to be stored on a `rejected` scan | Phase 2 made them visible to clients in `image.quality.metrics` and the 422; the scan object showed `metrics: {}` |
 | 2026-10-01 | 409 `INVALID_STATE` covers every status but `rejected`/`abstained`/`failed` and concurrent retakes; a retake keeps the scan species; a Tier B rejection sets `quality_passed` false; a non-inference failure after storage is 500 with the `scan_id`; an unknown mock scenario is 400 | Phase 3 made these visible to clients |
 | 2026-10-03 | Backend files moved under `Backend/`; the iOS app (`ios/`) renamed `Front-End/`; the README, license, `Assets/`, and `.github/` stay at the repo root. The api's Railway root directory becomes `/Backend/api`, and inference's config file `Backend/inference/railway.json` | Owner's restructure: one folder per side of the product at the root. Paths inside `Backend/` are unchanged |
+| 2026-10-15 | `POST /api/v1/auth/login` and env vars `LOGIN_USERNAME`, `LOGIN_PASSWORD` added | The app needs a login screen now. One shared account from env is the simplest version; it issues no token and the scan routes stay open until real auth (task 6.2) is decided |
