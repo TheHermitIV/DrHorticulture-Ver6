@@ -1,40 +1,52 @@
+"""Evaluate a saved bundle against a features.csv, with and without the greenness adjustment."""
+
+from __future__ import annotations
+
 import argparse
 import json
 
+import numpy as np
 
-def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Evaluate a trained NDVI regression model against sensor ground truth."
+from training.ndvi.extract import import_bundle_module, read_features_csv
+from training.ndvi.metrics import evaluate
+
+
+def evaluate_bundle(bundle, rows):
+    actual = np.asarray([row.target for row in rows], dtype=float)
+    raw = []
+    calibrated = []
+    for row in rows:
+        mean, _spread = bundle.predict_raw(row.features, row.species_probs)
+        raw.append(max(-1.0, min(1.0, mean)))
+        calibrated.append(bundle.predict(row.features, row.species_probs)["ndvi"])
+    raw = np.asarray(raw)
+    calibrated = np.asarray(calibrated)
+    return {
+        "n": int(len(rows)),
+        "raw": evaluate(actual, raw),
+        "calibrated": evaluate(actual, calibrated),
+        "calibration_helps": evaluate(actual, calibrated)["mae"] < evaluate(actual, raw)["mae"],
+    }
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(description="Evaluate a trained NDVI bundle.")
+    parser.add_argument("--features", required=True, help="features.csv path")
+    parser.add_argument(
+        "--model", default="../inference/weights/model.json", help="bundle JSON path"
     )
-    parser.add_argument("--features", default="data/features/features.csv")
-    parser.add_argument("--target", default="sensor_ndvi")
-    parser.add_argument("--group", default="plant_id")
-    parser.add_argument("--model", default="xgboost")
-    parser.add_argument("--model-path", default="models/ndvi/ndvi_xgb.json")
-    return parser.parse_args()
+    return parser
 
 
-def main():
-    args = parse_args()
-    import pandas as pd
-
-    from plantvision.ndvi.metrics import evaluate
-    from plantvision.models.registry import load_model
-
-    data = pd.read_csv(args.features)
-    if args.target not in data.columns:
-        raise SystemExit(f"Missing target column '{args.target}' in {args.features}")
-    feature_cols = [
-        c
-        for c in data.columns
-        if c not in {args.target, "image_id", args.group}
-    ]
-    X = data[feature_cols].to_numpy(dtype=float)
-    y = data[args.target].to_numpy(dtype=float)
-
-    model = load_model(args.model, args.model_path)
-    predictions = [model.predict(vector) for vector in X.tolist()]
-    print(json.dumps(evaluate(y.tolist(), predictions), indent=2))
+def main(argv=None):
+    args = build_parser().parse_args(argv)
+    Bundle, BundleError = import_bundle_module()
+    try:
+        bundle = Bundle.load(args.model)
+    except BundleError as exc:
+        raise SystemExit(f"error: {exc}") from exc
+    rows = read_features_csv(args.features, bundle.feature_names, bundle.species_labels)
+    print(json.dumps(evaluate_bundle(bundle, rows), indent=2))
 
 
 if __name__ == "__main__":

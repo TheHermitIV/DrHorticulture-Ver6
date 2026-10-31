@@ -19,6 +19,10 @@ venv/
 Backend/supabase/.temp/
 Backend/supabase/.branches/
 
+# Trained model bundles are derived artifacts; distribute them via the model-weights bucket.
+Backend/inference/weights/*
+!Backend/inference/weights/.gitkeep
+
 # OS
 .DS_Store
 Thumbs.db

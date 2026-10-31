@@ -1,3 +1,10 @@
+"""Legacy xgboost export helper.
+
+Superseded for the inference service by `python -m training.ndvi.pipeline`, which writes the
+JSON bundle (`model.json` + `manifest.json`) the service actually loads. Kept only for an
+xgboost-weights workflow outside the serving seam.
+"""
+
 import argparse
 import json
 import shutil
