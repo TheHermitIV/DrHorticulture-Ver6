@@ -20,10 +20,12 @@ from flask import Flask, jsonify, request
 from PIL import Image, ImageOps
 from werkzeug.exceptions import HTTPException
 
-import cv
-import ml
-from cv import embedder
-from ml.regressor import ENSEMBLE_SIZE
+PALM_DEMO_ENABLED = os.environ.get("PALM_DEMO_ENABLED") == "true"
+if not PALM_DEMO_ENABLED:
+    import cv
+    import ml
+    from cv import embedder
+    from ml.regressor import ENSEMBLE_SIZE
 
 DEFAULT_MODEL_VERSION = "stub-0.1"
 MIN_API_KEY_LENGTH = 16
@@ -146,7 +148,19 @@ def create_app(api_key=None, model_version=None, fetch_image=download_image):
         raise RuntimeError(
             f"INFERENCE_API_KEY must be set to at least {MIN_API_KEY_LENGTH} characters"
         )
-    model_version = model_version or os.environ.get("MODEL_VERSION") or DEFAULT_MODEL_VERSION
+    if PALM_DEMO_ENABLED:
+        from palm_demo import MODEL_PATH, MODEL_VERSION, PalmDemo
+
+        weights_path = os.environ.get("PALM_DEMO_MODEL_PATH") or MODEL_PATH
+        analyze_image = PalmDemo(weights_path).analyze
+        model_version = MODEL_VERSION
+    else:
+        model_version = model_version or os.environ.get("MODEL_VERSION") or DEFAULT_MODEL_VERSION
+
+        def analyze_image(image):
+            cv_out = cv.analyze(image)
+            ml_out = ml.predict(cv_out["features"], cv_out["species_probs"])
+            return build_response(cv_out, ml_out, model_version)
 
     app = Flask(__name__)
 
@@ -163,9 +177,7 @@ def create_app(api_key=None, model_version=None, fetch_image=download_image):
         image_url, image_id, _species_hint = parse_request(request.get_json(silent=True))
         started = time.perf_counter()
         image = decode_image(fetch_image(image_url))
-        cv_out = cv.analyze(image)
-        ml_out = ml.predict(cv_out["features"], cv_out["species_probs"])
-        body = build_response(cv_out, ml_out, model_version)
+        body = analyze_image(image)
         # Never log image_url: its token grants access to the image.
         log.info(
             "analyzed image_id=%s size=%dx%d latency_ms=%d",

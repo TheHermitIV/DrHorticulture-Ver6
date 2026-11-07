@@ -1,10 +1,24 @@
 # NDVI model training handoff
 
-Status: **wiring complete; the real model needs the lab data.** This document is written for a
-teammate (or an agent acting for one) who has the labeled potted-plant photos and needs to finish
-the NDVI model without re-deriving the architecture.
+## Palm demo
 
-The repo already runs end to end with a stub. Your job is to turn labeled photos into the JSON
+Provision the trained artifact privately on the Docker-based inference service, set
+`PALM_DEMO_MODEL_PATH` to its path, and set `PALM_DEMO_ENABLED=true` to use `palm-demo-v1`.
+The model combines a leaf segmenter and a ridge regressor trained on 25 reviewed
+palm photos with paired GreenSeeker readings.
+The API stores the estimate and applies its existing decision policy. The demo reports
+zero confidence pending calibration, so the current policy abstains from fertilizer advice.
+The v1 response and database schema stay the same.
+
+Rebuild the small numeric artifact with `python Backend/inference/train_palm_demo.py <review-work-folder>`
+in the PlantVision training environment with OpenCV and scikit-learn. The private review folder
+contains the manifest, reviewed masks, and plant photos. Keep the exported artifact in private
+storage. The exporter verifies mask and ridge
+prediction parity before replacing the artifact.
+
+## General NDVI bundle
+
+For the general bundle path, turn labeled photos into the JSON
 bundle the inference service loads (`ML_WEIGHTS_PATH`), verify it, and report the held-out metrics.
 You do not need to touch the api or the HTTP contract.
 
