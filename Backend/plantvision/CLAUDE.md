@@ -95,7 +95,21 @@ error (exit 1) — raise the specific subclass rather than a bare exception when
 
 ### Training scripts (`training/`)
 
-`training/segmentation/` and `training/ndvi/` hold placeholder scripts for fine-tuning the YOLO
-segmentation model and training the eventual sensor-supervised NDVI regression model. These are not
-wired into the CLI pipeline and are for future use once real sensor data / leaf annotations exist —
-treat them as a separate concern from `src/plantvision/`.
+`training/segmentation/` holds placeholder scripts for fine-tuning the YOLO segmentation model.
+
+`training/ndvi/` is the wired NDVI training pipeline. It runs the *serving* CV path
+(`inference/cv.analyze`) over labeled images, fits a bootstrap ridge ensemble on the color
+features + species probabilities, fits an optional greenness adjustment on held-out residuals,
+and writes the JSON bundle the inference service loads. Entrypoint:
+
+```bash
+python -m training.ndvi.pipeline --images data/raw --labels data/labels/labels.csv \
+  --out ../inference/weights --dry-run   # then without --dry-run to extract + train
+python -m training.ndvi.evaluate --features data/features/features.csv \
+  --model ../inference/weights/model.json
+pytest tests/integration/test_training_roundtrip.py -v
+```
+
+Input schema, outputs, failure->action, and the definition of done are in
+`../docs/ML_TRAINING_HANDOFF.md`. `training.ndvi.build_features` is a feature-only shim;
+`training.ndvi.export` is the legacy xgboost helper, superseded by the pipeline's bundle.
