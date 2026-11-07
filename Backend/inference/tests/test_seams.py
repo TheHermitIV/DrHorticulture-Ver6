@@ -40,7 +40,7 @@ def test_analyze_embedding_and_species_probs_match_their_declared_sizes():
 
 def test_predict_returns_every_seam_key():
     cv_out = cv.analyze(IMAGE)
-    out = ml.predict(cv_out["embedding"], cv_out["species_probs"])
+    out = ml.predict(cv_out["features"], cv_out["species_probs"])
     assert set(out) == {"ndvi", "ensemble_std", "confidence"}
     assert -1 <= out["ndvi"] <= 1
     assert out["ensemble_std"] >= 0
