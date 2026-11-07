@@ -28,6 +28,17 @@ struct PreviewView: View {
                 .font(.headline)
                 .accessibilityIdentifier("preview.title")
 
+            Text("Check that one plant is centered and its leaves are sharp and evenly lit.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            ForEach(session.photo?.qualityHints ?? [], id: \.self) { hint in
+                Label(hint, systemImage: "exclamationmark.triangle")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
             HStack(spacing: 16) {
                 Button("Retake") {
                     session.clear()
@@ -36,10 +47,11 @@ struct PreviewView: View {
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("preview.retakeButton")
 
-                Button("Accept") {
+                Button("Analyze photo") {
                     router.showResults()
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(!session.hasPhoto)
                 .accessibilityIdentifier("preview.acceptButton")
             }
             .controlSize(.large)

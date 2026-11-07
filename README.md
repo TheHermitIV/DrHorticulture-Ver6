@@ -99,6 +99,10 @@ Open `Front-End/DrHorticulture.xcodeproj` in Xcode and run the `DrHorticulture` 
 and uploads to TestFlight from `main`; local builds do not require the backend to be running when
 the mock analysis service is selected.
 
+For a test build, set `DRHORTICULTURE_API_BASE_URL` in the app target's Xcode build settings
+to the test server's HTTPS origin, or pass `DRHORTICULTURE_API_BASE_URL=https://your-test-server`
+to `xcodebuild`. A blank setting uses production. A malformed override stops the scan before upload.
+
 ## Tests
 
 ```bash

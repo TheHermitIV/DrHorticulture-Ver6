@@ -56,9 +56,9 @@ struct ResultsStateTests {
 
     // MARK: - Abstention from the backend's own decision
 
-    @Test func abstainRecommendationAbstains() {
-        #expect(ResultsState(scan: scan(recommendation: "abstain", abstainReason: "low_confidence")) ==
-            .abstention(reason: "The reading wasn't confident enough to make a call."))
+    @Test func abstainRecommendationKeepsTheEstimateEvenWithZeroConfidence() {
+        #expect(ResultsState(scan: scan(recommendation: "abstain", confidence: 0, abstainReason: "low_confidence")) ==
+            .estimateWithoutRecommendation(ndvi: 0.41, reason: "The reading wasn't confident enough to make a call."))
     }
 
     @Test func abstainOnLowMaskConfidence() {
@@ -66,18 +66,31 @@ struct ResultsStateTests {
             scan: scan(recommendation: "abstain", abstainReason: "low_mask_confidence")
         )
 
-        #expect(state == .abstention(reason: "The plant couldn't be found clearly in the photo."))
+        #expect(state == .estimateWithoutRecommendation(
+            ndvi: 0.41, reason: "The plant couldn't be found clearly in the photo."
+        ))
     }
 
     @Test func abstainWithNoReasonUsesGenericCopy() {
         #expect(ResultsState(scan: scan(recommendation: "abstain")) ==
-            .abstention(reason: AbstentionReason.generic))
+            .estimateWithoutRecommendation(ndvi: 0.41, reason: "The estimate is available for reference."))
     }
 
     /// A reason the app doesn't have copy for is surfaced rather than swallowed.
     @Test func unknownAbstainReasonIsPassedThrough() {
         #expect(ResultsState(scan: scan(recommendation: "abstain", abstainReason: "weird_new_reason")) ==
-            .abstention(reason: "weird_new_reason"))
+            .estimateWithoutRecommendation(ndvi: 0.41, reason: "weird_new_reason"))
+    }
+
+    @Test func abstentionWithoutAnEstimateShowsRetakeCopy() {
+        #expect(ResultsState(scan: scan(recommendation: "abstain", ndvi: nil)) ==
+            .abstention(reason: AbstentionReason.generic))
+    }
+
+    @Test(arguments: ["rejected", "failed"])
+    func rejectedOrFailedStatusDoesNotDisplayAStaleEstimate(status: String) {
+        #expect(ResultsState(scan: scan(status: status, recommendation: "abstain")) ==
+            .abstention(reason: AbstentionReason.copy(for: ScanStatus(rawValue: status))))
     }
 
     // MARK: - Abstention from a missing result

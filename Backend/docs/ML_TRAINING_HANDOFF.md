@@ -38,6 +38,38 @@ from fertilizer advice while confidence calibration is pending.
    readings exist. The exporter checks that the JSON reproduces the fitted models.
    Use held-out results to decide whether to switch the Railway model path.
 
+### VARI candidate for NDVI
+
+Keep the current demo feature set and retest the Visible Atmospherically Resistant
+Index (VARI) on fresh palms. In the development benchmark, both models used the same
+leaf masks, ridge settings, 92 training plants, and 30 held-out plants. Adding VARI
+lowered mean absolute error from **0.04742 to 0.04697 NDVI units**. The paired
+bootstrap 95% interval for the change was −0.00172 to +0.00076, so the result
+is consistent with a small improvement or a small loss.
+
+To reproduce the candidate, average `(G - R) / (G + R - B)` across pixels in the
+leaf mask, excluding pixels where `abs(G + R - B) < 10` on the 8-bit RGB scale.
+Compare the baseline and baseline plus VARI on the same fresh, held-out palms
+with paired GreenSeeker readings. Adopt VARI if it lowers mean absolute error
+again without reducing prediction coverage.
+
+### Species labels and automatic identification
+
+The demo scan flow skips species selection and the NDVI estimator uses no species input.
+In a development comparison with the same leaf masks and 92 training plants, adding
+recorded species labels to the ridge model changed mean absolute error from **0.0474 to
+0.0507 NDVI units** across 30 held-out plants. Among the 26 with known species, error
+changed from **0.0452 to 0.0490**. The four plants with unknown labels used the baseline
+estimate in both comparisons. Two taxa had only one test plant each, so the comparison
+does not establish how species features would perform on a larger dataset.
+
+Defer automatic species identification as a separate feature. For a future trial, compare
+the original photo with an RGB crop guided by the leaf mask. Check whether the classifier
+covers the four recorded taxa, test on separate plants and out-of-scope species, and allow
+an unknown result. Show a species prediction as a suggestion the user can confirm.
+Keep identification separate from NDVI estimation unless a new held-out evaluation shows
+that adding species improves NDVI accuracy.
+
 ## General NDVI bundle
 
 For the general bundle path, turn labeled photos into the JSON
