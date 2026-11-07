@@ -1,10 +1,5 @@
 segmentation:
-  model_path: models/segmentation/yolo11n-seg.pt
-  confidence_threshold: 0.25
-  image_size: 640
-  device: null
-  classes:
-    - 58
+  model_path: models/segmentation/leaf-segmentor.json
   min_leaf_pixels: 10
 
 features:

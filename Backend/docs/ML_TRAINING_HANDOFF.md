@@ -1,20 +1,42 @@
 # NDVI model training handoff
 
-## Palm demo
+## LeafSegmenter
 
-Provision the trained artifact privately on the Docker-based inference service, set
-`PALM_DEMO_MODEL_PATH` to its path, and set `PALM_DEMO_ENABLED=true` to use `palm-demo-v1`.
-The model combines a leaf segmenter and a ridge regressor trained on 25 reviewed
-palm photos with paired GreenSeeker readings.
-The API stores the estimate and applies its existing decision policy. The demo reports
-zero confidence pending calibration, so the current policy abstains from fertilizer advice.
-The v1 response and database schema stay the same.
+The inference Docker image defaults to **LeafSegmenter v1.0.0** and its paired NDVI estimator.
+Before rolling out the image, put the approved artifact on a private runtime mount and set
+`LEAF_SEGMENTER_MODEL_PATH=/models/leaf-segmenter-v1.0.0.json` to the file on that mount.
+`GET /health` reports the loaded version. The API stores the NDVI estimate and abstains
+from fertilizer advice while confidence calibration is pending.
 
-Rebuild the small numeric artifact with `python Backend/inference/train_palm_demo.py <review-work-folder>`
-in the PlantVision training environment with OpenCV and scikit-learn. The private review folder
-contains the manifest, reviewed masks, and plant photos. Keep the exported artifact in private
-storage. The exporter verifies mask and ridge
-prediction parity before replacing the artifact.
+### Add training data
+
+1. Copy the private review workspace and keep a separate set of plants for evaluation.
+   Keep every photo of a given plant in the same split. Prioritize thin fronds, shadows,
+   and neighboring pots.
+2. For each new training plant, create a unique folder such as `plant-026/` with an
+   upright `photo.jpg`, an aligned `reviewed.png`, and `annotation.json`. The PNG should
+   contain white pixels for the target foliage and black pixels for everything else.
+   Set the annotation to `{"status":"accepted","mask_sha256":"<SHA-256 of reviewed.png>"}`
+   after review. PowerShell can calculate it with
+   `(Get-FileHash ./plant-026/reviewed.png -Algorithm SHA256).Hash.ToLowerInvariant()`.
+3. Append `{"id":"plant-026","greenseeker_ndvi":0.54}` to the training workspace's
+   `manifest.json` array. Use the actual paired measurement or `null` if you only have a
+   mask. All reviewed masks train the segmenter. Only photos with measurements and
+   usable predicted masks train the NDVI estimator. Keep the existing paired photos.
+4. Train from the repo root in a Python environment with PlantVision, OpenCV, and
+   scikit-learn. Create the private output directory first, then use a new version
+   and output path for each candidate.
+
+   ```sh
+   python Backend/inference/train_leaf_segmenter.py "/private/review-work" \
+     --model-version "LeafSegmenter v1.1.0" \
+     --output "/private/models/leaf-segmenter-v1.1.0.json"
+   ```
+
+5. Compare both model versions on the same held-out photos. Check mask overlap with
+   reviewed masks, prediction coverage, and NDVI error against GreenSeeker where
+   readings exist. The exporter checks that the JSON reproduces the fitted models.
+   Use held-out results to decide whether to switch the Railway model path.
 
 ## General NDVI bundle
 
@@ -66,7 +88,7 @@ Put photos in `Backend/plantvision/data/raw/` and the CSV in
 ```bash
 cd Backend/plantvision
 python -m venv .venv
-.venv/bin/python -m pip install -e ".[ml,dev]"      # ml: ultralytics/torch/transformers/sklearn
+.venv/bin/python -m pip install -e ".[ml,dev]"      # OpenCV, torch, transformers, scikit-learn
                                                     # dev: pytest (+ scikit-learn for the roundtrip)
 
 # 1. Validate the data only. No models load, no torch. This is the fast first check.
@@ -83,8 +105,8 @@ pytest tests/integration/test_training_roundtrip.py -v
 
 Windows note: use `.venv\Scripts\python` instead of `.venv/bin/python`.
 
-The first extraction run downloads the species classifier (~390 MB) and uses the YOLO weights
-already in the repo. Later runs are offline.
+Set `LEAF_SEGMENTER_MODEL_PATH` to the private artifact before feature extraction.
+The first run downloads and caches the species classifier.
 
 ### Useful flags
 

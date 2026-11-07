@@ -6,13 +6,21 @@ from pathlib import Path
 import cv2
 import numpy as np
 from PIL import Image
+from plantvision import SegmentationError
 from plantvision.features.extractor import FEATURE_KEYS, FeatureExtractor
+from plantvision.segmentation.model import SegmentationModel, SegmentationResult
 
-MODEL_PATH = Path(__file__).with_name("weights") / "palm-demo-v1.json"
-MODEL_VERSION = "palm-demo-v1"
+MODEL_FORMAT = "palm-demo-v1"
+MODEL_VERSION = "LeafSegmenter v1.0.0"
 MAX_SIDE = 768
 MIN_FRACTION = 0.002
 MAX_FRACTION = 0.70
+
+
+def prepare_rgb(image):
+    resized = Image.fromarray(image)
+    resized.thumbnail((1536, 1536), Image.Resampling.LANCZOS)
+    return np.asarray(resized)
 
 
 def pixel_features(rgb):
@@ -43,14 +51,17 @@ def clean_mask(selected, image_shape):
                       interpolation=cv2.INTER_NEAREST).astype(bool)
 
 
-class PalmDemo:
+class LeafSegmenter(SegmentationModel):
     """Evaluate exported numeric trees and ridge coefficients without a pickle."""
 
-    def __init__(self, path=MODEL_PATH):
+    def __init__(self, path):
         with Path(path).open(encoding="utf-8") as file:
             artifact = json.load(file)
-        if artifact["version"] != MODEL_VERSION or artifact["feature_keys"] != FEATURE_KEYS:
-            raise ValueError("Incompatible palm demo model")
+        if artifact["version"] != MODEL_FORMAT or artifact["feature_keys"] != FEATURE_KEYS:
+            raise ValueError("Incompatible LeafSegmenter model")
+        self.model_version = artifact.get("model_version", MODEL_VERSION)
+        if not isinstance(self.model_version, str) or not self.model_version.strip():
+            raise ValueError("Palm model version must be a nonempty string")
         self.baseline = artifact["baseline"]
         self.trees = [
             (np.asarray(tree["feature"], dtype=np.intp), np.asarray(tree["threshold"]),
@@ -75,17 +86,21 @@ class PalmDemo:
             score += value[nodes]
         return clean_mask((score >= 0).reshape(features.shape[:2]), image.shape)
 
+    def predict(self, image):
+        mask = self.mask(image.array)
+        if not MIN_FRACTION <= mask.mean() <= MAX_FRACTION:
+            raise SegmentationError("Segmentation returned no usable leaf mask")
+        return SegmentationResult(combined_mask=mask)
+
     def analyze(self, image):
-        resized = Image.fromarray(image)
-        resized.thumbnail((1536, 1536), Image.Resampling.LANCZOS)
-        rgb = np.asarray(resized)
+        rgb = prepare_rgb(image)
         mask = self.mask(rgb)
         fraction = float(mask.mean())
         detected = MIN_FRACTION <= fraction <= MAX_FRACTION
         indices = self.extractor.extract(rgb, mask) if detected else None
         ndvi = float(np.clip(self.intercept + self.coefficients @ indices.to_vector(), 0, .99)) if detected else 0.0
         return {
-            "model_version": MODEL_VERSION,
+            "model_version": self.model_version,
             "segmentation": {"plant_detected": detected, "mask_confidence": 0.0,
                              "leaf_fraction": round(fraction, 6)},
             "species": {"top_label": "unknown", "top_prob": 0.0},
