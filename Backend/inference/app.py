@@ -164,7 +164,7 @@ def create_app(api_key=None, model_version=None, fetch_image=download_image):
         started = time.perf_counter()
         image = decode_image(fetch_image(image_url))
         cv_out = cv.analyze(image)
-        ml_out = ml.predict(cv_out["embedding"], cv_out["species_probs"])
+        ml_out = ml.predict(cv_out["features"], cv_out["species_probs"])
         body = build_response(cv_out, ml_out, model_version)
         # Never log image_url: its token grants access to the image.
         log.info(
