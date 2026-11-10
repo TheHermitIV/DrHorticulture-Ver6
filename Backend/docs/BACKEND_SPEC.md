@@ -541,7 +541,7 @@ Infrastructure settings live in env vars; product thresholds live in the `decisi
 | `ML_WEIGHTS_PATH` | inference | `/app/inference/weights/model.json` | JSON bundle written by `training/ndvi/pipeline.py`; unset means stub values |
 | `CV_ENGINE` | inference | `stub` | Local feature pipeline selector when LeafSegmenter mode is off |
 | `LEAF_SEGMENTER_ENABLED` | inference | `true` in Docker | Loads LeafSegmenter and its paired NDVI estimator |
-| `LEAF_SEGMENTER_MODEL_PATH` | inference | `/models/leaf-segmenter-v1.0.0.json` (example) | Path to the privately mounted artifact |
+| `LEAF_SEGMENTER_MODEL_PATH` | inference | unset (`inference/weights/leaf-segmenter-v1.0.0.json`, in the image) | Optional override, such as a file on a mounted volume |
 
 Locally, run the api with `INFERENCE_MODE=mock` so it needs nothing but Supabase. The inference service can also run locally on port 8000, with `INFERENCE_URL=http://localhost:8000` and the same `INFERENCE_API_KEY` on both sides, to test `remote` mode.
 
@@ -747,3 +747,4 @@ Every open decision has a working default, so none of them blocks the build. Whe
 | 2026-10-01 | 409 `INVALID_STATE` covers every status but `rejected`/`abstained`/`failed` and concurrent retakes; a retake keeps the scan species; a Tier B rejection sets `quality_passed` false; a non-inference failure after storage is 500 with the `scan_id`; an unknown mock scenario is 400 | Phase 3 made these visible to clients |
 | 2026-10-03 | Backend files moved under `Backend/`; the iOS app (`ios/`) renamed `Front-End/`; the README, license, `Assets/`, and `.github/` stay at the repo root. The api's Railway root directory becomes `/Backend/api`, and inference's config file `Backend/inference/railway.json` | Owner's restructure: one folder per side of the product at the root. Paths inside `Backend/` are unchanged |
 | 2026-10-31 | ML seam is now `ml.predict(features, species_probs)`; added the JSON model bundle (`inference/ml/bundle.py`), `ML_WEIGHTS_PATH`, and the offline training pipeline (`plantvision/training/ndvi/pipeline.py`) with a greenness post-adjustment in the bundle | At the current dataset size the CV color features are the model's representation; the frozen-backbone embedding is deferred. The HTTP v1 response and `decide()` are unchanged |
+| 2026-11-10 | The LeafSegmenter model (`inference/weights/leaf-segmenter-v1.0.0.json`) is committed and baked into the inference image; `LEAF_SEGMENTER_MODEL_PATH` becomes an optional override | Owner's decision: deploy by switching the Railway branch alone, with no volume or upload step. The model is now public with the repo |

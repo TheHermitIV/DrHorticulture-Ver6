@@ -8,8 +8,8 @@ every product rule (quality gate, thresholds, decision). The inference service t
 raw numbers and never decides, writes, or sees Supabase keys.
 
 > The inference Docker image defaults to LeafSegmenter v1.0.0 with its paired NDVI estimator.
-> See the [training handoff](Backend/docs/ML_TRAINING_HANDOFF.md) for private model provisioning,
-> retraining, and evaluation.
+> The model file ships in `Backend/inference/weights/`. See the
+> [training handoff](Backend/docs/ML_TRAINING_HANDOFF.md) for retraining and evaluation.
 
 ## How a scan flows
 
@@ -195,11 +195,11 @@ training writes it, inference loads it. One format, no drift.
 ## Deployment
 
 Follow the [Railway deployment runbook](Backend/docs/RAILWAY_DEPLOYMENT.md) to
-provision the private model, deploy the services, and verify a scan.
+deploy the services and verify a scan.
 
 - `api` deploys from `main` to Railway (root directory `/Backend/api`).
 - `inference` deploys as a separate Railway service using `Backend/inference/railway.json` and a
-  Dockerfile built from the repo root. It defaults to LeafSegmenter and requires the private model file at `LEAF_SEGMENTER_MODEL_PATH`.
+  Dockerfile built from the repo root. It defaults to LeafSegmenter, whose model file ships in the image.
 - The iOS app is built and uploaded to TestFlight by `.github/workflows/ios.yml` on `main`.
 
 ## Further reading
