@@ -194,6 +194,9 @@ training writes it, inference loads it. One format, no drift.
 
 ## Deployment
 
+Follow the [Railway deployment runbook](Backend/docs/RAILWAY_DEPLOYMENT.md) to
+provision the private model, deploy the services, and verify a scan.
+
 - `api` deploys from `main` to Railway (root directory `/Backend/api`).
 - `inference` deploys as a separate Railway service using `Backend/inference/railway.json` and a
   Dockerfile built from the repo root. It defaults to LeafSegmenter and requires the private model file at `LEAF_SEGMENTER_MODEL_PATH`.

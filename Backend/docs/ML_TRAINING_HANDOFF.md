@@ -3,6 +3,7 @@
 ## LeafSegmenter
 
 The inference Docker image defaults to **LeafSegmenter v1.0.0** and its paired NDVI estimator.
+Follow the [Railway deployment runbook](RAILWAY_DEPLOYMENT.md) for the rollout and smoke test.
 Before rolling out the image, put the approved artifact on a private runtime mount and set
 `LEAF_SEGMENTER_MODEL_PATH=/models/leaf-segmenter-v1.0.0.json` to the file on that mount.
 `GET /health` reports the loaded version. The API stores the NDVI estimate and abstains
