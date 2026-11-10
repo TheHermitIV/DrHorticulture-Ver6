@@ -4,3 +4,5 @@
 *.png binary
 *.jpg binary
 *.jpeg binary
+# Stored byte-for-byte so its SHA-256 matches the released model.
+Backend/inference/weights/leaf-segmenter-v1.0.0.json -text
