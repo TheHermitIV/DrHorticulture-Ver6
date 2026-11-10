@@ -88,6 +88,7 @@ npx vitest run -t "reports ok"       # tests matching a name
 npm run lint
 npm run format                       # Prettier write; CI runs format:check
 npm run gate:calibrate -- <folder>   # Tier A metric distributions + pass rates (reads api/.env)
+npm run test-page                    # test pages on localhost:3000; uploads go to the production api
 
 # inference tests (from Backend/inference/; venv with requirements-dev.txt installed)
 .venv/bin/python -m pytest

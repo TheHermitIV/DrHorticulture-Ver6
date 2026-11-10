@@ -17,7 +17,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "gate:calibrate": "node --env-file-if-exists=.env scripts/gate-calibrate.js",
-    "scans:purge": "node --env-file-if-exists=.env scripts/purge-scans.js"
+    "scans:purge": "node --env-file-if-exists=.env scripts/purge-scans.js",
+    "test-page": "node scripts/test-page.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.117.2",
