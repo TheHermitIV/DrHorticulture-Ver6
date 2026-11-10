@@ -4,7 +4,7 @@ This is the test an agent runs to prove the wiring works: synthetic features -> 
 load -> predict. It skips when scikit-learn is not installed (CI installs only `.[dev]`); run
 `pip install -e ".[ml,dev]"` to exercise it locally.
 
-It deliberately does not touch YOLO, torch, or the species classifier, so it stays fast.
+It deliberately does not touch the image models, so it stays fast.
 """
 
 import sys

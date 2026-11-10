@@ -100,13 +100,16 @@ final class NavigationFlowUITests: XCTestCase {
         XCTAssertTrue(note.waitForExistence(timeout: 10))
     }
 
-    func testScanTabOffersASpeciesPicker() {
+    func testScanTabDoesNotAskForSpecies() {
         let app = launch()
 
         app.tabBars.firstMatch.buttons["Scan"].tap()
 
+        let viewfinder = app.descendants(matching: .any)
+            .matching(identifier: "capture.viewfinder").firstMatch
+        XCTAssertTrue(viewfinder.waitForExistence(timeout: 10))
         let picker = app.descendants(matching: .any)
             .matching(identifier: "capture.speciesPicker").firstMatch
-        XCTAssertTrue(picker.waitForExistence(timeout: 10))
+        XCTAssertFalse(picker.exists)
     }
 }

@@ -1,17 +1,32 @@
 import Foundation
 
 /// Talks to the live backend: `POST /api/v1/scans` as multipart with a
-/// `species` field and one JPEG in `image`.
+/// optional `species` field and one JPEG in `image`.
 struct APIAnalysisService: AnalysisService {
-    // TODO(decision): move to build configuration
-    var baseURL = URL(string: "https://drhorticulture-ver6-production.up.railway.app")!
+    private static let productionURL = URL(string: "https://drhorticulture-ver6-production.up.railway.app")!
+    var baseURL: URL? = APIAnalysisService.configuredBaseURL(
+        Bundle.main.object(forInfoDictionaryKey: "APIBaseURL") as? String
+    )
+
+    static func configuredBaseURL(_ value: String?) -> URL? {
+        let value = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !value.isEmpty else { return productionURL }
+        guard let url = URL(string: value), url.scheme?.lowercased() == "https",
+              let host = url.host, !host.isEmpty, url.user == nil, url.password == nil,
+              url.query == nil, url.fragment == nil
+        else { return nil }
+        return url
+    }
 
     func analyze(imageData: Data, species: String) async throws -> Scan {
+        guard let baseURL else {
+            throw AnalysisError.transport("The app's server URL is invalid.")
+        }
         let boundary = "Boundary-\(UUID().uuidString)"
 
         var request = URLRequest(
             url: baseURL.appending(path: "api/v1/scans"),
-            timeoutInterval: 60
+            timeoutInterval: 150
         )
         request.httpMethod = "POST"
         request.setValue(
@@ -56,12 +71,15 @@ struct APIAnalysisService: AnalysisService {
         }
     }
 
-    /// `species` first, then the photo bytes unchanged.
+    /// Include the species hint when supplied, followed by the photo bytes.
     private static func multipartBody(imageData: Data, species: String, boundary: String) -> Data {
         var body = Data()
-        body.append(Data("--\(boundary)\r\n".utf8))
-        body.append(Data("Content-Disposition: form-data; name=\"species\"\r\n\r\n".utf8))
-        body.append(Data("\(species)\r\n".utf8))
+        let species = species.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !species.isEmpty {
+            body.append(Data("--\(boundary)\r\n".utf8))
+            body.append(Data("Content-Disposition: form-data; name=\"species\"\r\n\r\n".utf8))
+            body.append(Data("\(species)\r\n".utf8))
+        }
         body.append(Data("--\(boundary)\r\n".utf8))
         body.append(
             Data("Content-Disposition: form-data; name=\"image\"; filename=\"photo.jpg\"\r\n".utf8)

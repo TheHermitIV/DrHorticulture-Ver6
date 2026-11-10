@@ -12,20 +12,51 @@ struct CapturedPhoto: Equatable {
     var image: UIImage
     var data: Data
     var source: Source
+    var qualityHints: [String]
 
     init?(image: UIImage, source: Source) {
         guard let data = image.jpegData(compressionQuality: 0.9) else { return nil }
         self.image = image
         self.data = data
         self.source = source
+        self.qualityHints = source == .sample ? [] : Self.qualityHints(for: image)
+    }
+
+    /// Advisory defaults. The server applies the active quality rules to the upload.
+    private static func qualityHints(for image: UIImage) -> [String] {
+        guard let cgImage = image.cgImage else { return [] }
+        var hints: [String] = []
+        if min(cgImage.width, cgImage.height) < 1024 {
+            hints.append("This photo is small. Try the original full-resolution photo.")
+        }
+
+        let side = 64
+        var pixels = [UInt8](repeating: 0, count: side * side)
+        let sampled = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(
+                data: buffer.baseAddress, width: side, height: side, bitsPerComponent: 8,
+                bytesPerRow: side, space: CGColorSpaceCreateDeviceGray(),
+                bitmapInfo: CGImageAlphaInfo.none.rawValue
+            ) else { return false }
+            context.interpolationQuality = .medium
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: CGFloat(side), height: CGFloat(side)))
+            return true
+        }
+        if sampled {
+            let mean = Double(pixels.reduce(0) { $0 + Int($1) }) / Double(pixels.count)
+            if mean < 60 {
+                hints.append("This photo looks dark. Try brighter, even lighting.")
+            } else if mean > 200 {
+                hints.append("This photo looks very bright. Try softer light and avoid glare.")
+            }
+        }
+        return hints
     }
 }
 
-/// `species` is required by `POST /api/v1/scans`, so the user picks one before
-/// the photo is sent.
+/// Demo scans leave the optional species hint blank.
 enum PlantSpecies {
-    static let options = ["geranium", "basil", "tomato", "pothos", "monstera"]
-    static let fallback = "geranium"
+    static let fallback = ""
 }
 
 /// The scan in progress. One instance lives for the life of the Scan tab.

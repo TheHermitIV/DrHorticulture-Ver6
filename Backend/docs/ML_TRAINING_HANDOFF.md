@@ -1,10 +1,79 @@
 # NDVI model training handoff
 
-Status: **wiring complete; the real model needs the lab data.** This document is written for a
-teammate (or an agent acting for one) who has the labeled potted-plant photos and needs to finish
-the NDVI model without re-deriving the architecture.
+## LeafSegmenter
 
-The repo already runs end to end with a stub. Your job is to turn labeled photos into the JSON
+The inference Docker image defaults to **LeafSegmenter v1.0.0** and its paired NDVI estimator.
+Follow the [Railway deployment runbook](RAILWAY_DEPLOYMENT.md) for the rollout and smoke test.
+Before rolling out the image, put the approved artifact on a private runtime mount and set
+`LEAF_SEGMENTER_MODEL_PATH=/models/leaf-segmenter-v1.0.0.json` to the file on that mount.
+`GET /health` reports the loaded version. The API stores the NDVI estimate and abstains
+from fertilizer advice while confidence calibration is pending.
+
+### Add training data
+
+1. Copy the private review workspace and keep a separate set of plants for evaluation.
+   Keep every photo of a given plant in the same split. Prioritize thin fronds, shadows,
+   and neighboring pots.
+2. For each new training plant, create a unique folder such as `plant-026/` with an
+   upright `photo.jpg`, an aligned `reviewed.png`, and `annotation.json`. The PNG should
+   contain white pixels for the target foliage and black pixels for everything else.
+   Set the annotation to `{"status":"accepted","mask_sha256":"<SHA-256 of reviewed.png>"}`
+   after review. PowerShell can calculate it with
+   `(Get-FileHash ./plant-026/reviewed.png -Algorithm SHA256).Hash.ToLowerInvariant()`.
+3. Append `{"id":"plant-026","greenseeker_ndvi":0.54}` to the training workspace's
+   `manifest.json` array. Use the actual paired measurement or `null` if you only have a
+   mask. All reviewed masks train the segmenter. Only photos with measurements and
+   usable predicted masks train the NDVI estimator. Keep the existing paired photos.
+4. Train from the repo root in a Python environment with PlantVision, OpenCV, and
+   scikit-learn. Create the private output directory first, then use a new version
+   and output path for each candidate.
+
+   ```sh
+   python Backend/inference/train_leaf_segmenter.py "/private/review-work" \
+     --model-version "LeafSegmenter v1.1.0" \
+     --output "/private/models/leaf-segmenter-v1.1.0.json"
+   ```
+
+5. Compare both model versions on the same held-out photos. Check mask overlap with
+   reviewed masks, prediction coverage, and NDVI error against GreenSeeker where
+   readings exist. The exporter checks that the JSON reproduces the fitted models.
+   Use held-out results to decide whether to switch the Railway model path.
+
+### VARI candidate for NDVI
+
+Keep the current demo feature set and retest the Visible Atmospherically Resistant
+Index (VARI) on fresh palms. In the development benchmark, both models used the same
+leaf masks, ridge settings, 92 training plants, and 30 held-out plants. Adding VARI
+lowered mean absolute error from **0.04742 to 0.04697 NDVI units**. The paired
+bootstrap 95% interval for the change was −0.00172 to +0.00076, so the result
+is consistent with a small improvement or a small loss.
+
+To reproduce the candidate, average `(G - R) / (G + R - B)` across pixels in the
+leaf mask, excluding pixels where `abs(G + R - B) < 10` on the 8-bit RGB scale.
+Compare the baseline and baseline plus VARI on the same fresh, held-out palms
+with paired GreenSeeker readings. Adopt VARI if it lowers mean absolute error
+again without reducing prediction coverage.
+
+### Species labels and automatic identification
+
+The demo scan flow skips species selection and the NDVI estimator uses no species input.
+In a development comparison with the same leaf masks and 92 training plants, adding
+recorded species labels to the ridge model changed mean absolute error from **0.0474 to
+0.0507 NDVI units** across 30 held-out plants. Among the 26 with known species, error
+changed from **0.0452 to 0.0490**. The four plants with unknown labels used the baseline
+estimate in both comparisons. Two taxa had only one test plant each, so the comparison
+does not establish how species features would perform on a larger dataset.
+
+Defer automatic species identification as a separate feature. For a future trial, compare
+the original photo with an RGB crop guided by the leaf mask. Check whether the classifier
+covers the four recorded taxa, test on separate plants and out-of-scope species, and allow
+an unknown result. Show a species prediction as a suggestion the user can confirm.
+Keep identification separate from NDVI estimation unless a new held-out evaluation shows
+that adding species improves NDVI accuracy.
+
+## General NDVI bundle
+
+For the general bundle path, turn labeled photos into the JSON
 bundle the inference service loads (`ML_WEIGHTS_PATH`), verify it, and report the held-out metrics.
 You do not need to touch the api or the HTTP contract.
 
@@ -52,7 +121,7 @@ Put photos in `Backend/plantvision/data/raw/` and the CSV in
 ```bash
 cd Backend/plantvision
 python -m venv .venv
-.venv/bin/python -m pip install -e ".[ml,dev]"      # ml: ultralytics/torch/transformers/sklearn
+.venv/bin/python -m pip install -e ".[ml,dev]"      # OpenCV, torch, transformers, scikit-learn
                                                     # dev: pytest (+ scikit-learn for the roundtrip)
 
 # 1. Validate the data only. No models load, no torch. This is the fast first check.
@@ -69,8 +138,8 @@ pytest tests/integration/test_training_roundtrip.py -v
 
 Windows note: use `.venv\Scripts\python` instead of `.venv/bin/python`.
 
-The first extraction run downloads the species classifier (~390 MB) and uses the YOLO weights
-already in the repo. Later runs are offline.
+Set `LEAF_SEGMENTER_MODEL_PATH` to the private artifact before feature extraction.
+The first run downloads and caches the species classifier.
 
 ### Useful flags
 

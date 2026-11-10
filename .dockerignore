@@ -7,3 +7,5 @@
 **/.env.*
 Front-End
 Assets
+Backend/inference/weights
+Backend/plantvision/data
