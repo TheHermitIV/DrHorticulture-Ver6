@@ -52,10 +52,10 @@ describe('GET /api/v1/scans/:id', () => {
   });
 
   it.each([
-    ['rejected by Tier A', { image: 'dark' }, 'rejected', false],
-    ['rejected by Tier B', { scenario: 'no_plant' }, 'rejected', false],
-    ['failed', { scenario: 'error' }, 'failed', true],
-  ])('shows a scan %s with no result', async (_name, options, status, passed) => {
+    ['rejected by Tier A', { image: 'dark' }, 'rejected', false, 'too_dark'],
+    ['rejected by Tier B', { scenario: 'no_plant' }, 'rejected', false, 'no_plant_detected'],
+    ['failed', { scenario: 'error' }, 'failed', true, null],
+  ])('shows a scan %s with no result', async (_name, options, status, passed, reason) => {
     const { app } = setup();
     const image = options.image === 'dark' ? darkPhoto : photo;
     const { scanId } = await postScan(app, { ...options, image });
@@ -63,6 +63,9 @@ describe('GET /api/v1/scans/:id', () => {
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ scan_id: scanId, status, result: null });
     expect(res.body.image.quality.passed).toBe(passed);
+    expect(res.body.image.quality.rejection_reasons).toEqual(
+      reason ? [{ code: reason, message: expect.any(String), hint: expect.any(String) }] : [],
+    );
   });
 
   it('shows the latest image and the latest analysis', async () => {

@@ -1,3 +1,5 @@
+import { REJECTIONS } from './qualityGate.js';
+
 // Statuses whose scan object carries a result. It is null while processing, and after a
 // rejection or a failure, which have no recommendation to show.
 const WITH_RESULT = new Set(['completed', 'abstained']);
@@ -13,7 +15,18 @@ export function toScanObject({ scan, image, imageUrl, analysis = null }) {
       ? {
           id: image.id,
           url: imageUrl,
-          quality: { passed: image.quality_passed, metrics: image.quality_metrics },
+          width: image.width,
+          height: image.height,
+          mime_type: image.mime_type,
+          quality: {
+            passed: image.quality_passed,
+            metrics: image.quality_metrics,
+            rejection_reasons: (image.rejection_reasons ?? []).map((code) => ({
+              code,
+              message: REJECTIONS[code]?.message ?? code,
+              hint: REJECTIONS[code]?.hint ?? null,
+            })),
+          },
         }
       : null,
     result:
@@ -27,6 +40,15 @@ export function toScanObject({ scan, image, imageUrl, analysis = null }) {
             config_version: analysis.config_version,
           }
         : null,
+    diagnostics: analysis
+      ? {
+          mask_confidence: analysis.mask_confidence ?? null,
+          leaf_fraction: analysis.leaf_fraction ?? null,
+          latency_ms: analysis.latency_ms ?? null,
+          model_version: analysis.model_version ?? null,
+          config_version: analysis.config_version ?? null,
+        }
+      : null,
     created_at: scan.created_at,
   };
 }

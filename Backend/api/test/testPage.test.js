@@ -11,7 +11,9 @@ describe('GET /test.html', () => {
     const res = await request(appFor(nodeEnv)).get('/test.html');
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/text\/html/);
-    expect(res.text).toContain('/api/v1/scans');
+    expect(res.text).toContain('id="scan-form"');
+    expect(res.text).toContain('src="/scan.js"');
+    expect(res.text).not.toContain('name="species"');
   });
 
   it('is not served in production', async () => {
@@ -26,12 +28,27 @@ describe('GET /ImageData.html', () => {
     const res = await request(appFor(nodeEnv)).get('/ImageData.html');
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/text\/html/);
-    expect(res.text).toContain('/api/v1/scans');
+    expect(res.text).toContain('id="load-form"');
+    expect(res.text).toContain('src="/scan.js"');
   });
 
   it('is not served in production', async () => {
     const res = await request(appFor('production')).get('/ImageData.html');
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+});
+
+describe('GET /leaf-mask.html', () => {
+  it.each(['development', 'test'])('serves the mask creator when NODE_ENV=%s', async (nodeEnv) => {
+    const res = await request(appFor(nodeEnv)).get('/leaf-mask.html');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/text\/html/);
+    expect(res.text).toContain('src="./leaf-mask.js"');
+  });
+
+  it('is not served in production', async () => {
+    const res = await request(appFor('production')).get('/leaf-mask.html');
+    expect(res.status).toBe(404);
   });
 });

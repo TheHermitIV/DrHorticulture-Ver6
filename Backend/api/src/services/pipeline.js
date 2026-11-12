@@ -103,7 +103,7 @@ export function createPipeline({ db, storage, config, inference }) {
         { log, scenario },
       );
       latencyMs = elapsed();
-      const decision = decide(response, cfg);
+      const decision = decide(response, cfg, image.quality_metrics);
       const analysis = await db.analyses.insert({
         ...base,
         model_version: response.model_version,
@@ -117,13 +117,23 @@ export function createPipeline({ db, storage, config, inference }) {
         raw_response: body,
         latency_ms: latencyMs,
       });
-      // A Tier B rejection fails the image's quality gate like a Tier A one.
+      const leafLighting = response.checks.leaf_lighting;
+      const qualityUpdate = leafLighting
+        ? {
+            quality_metrics: {
+              ...image.quality_metrics,
+              leaf_mean_luminance: leafLighting.mean_luminance,
+              leaf_clipped_pct: leafLighting.clipped_pct,
+            },
+          }
+        : {};
+      if (decision.status === 'rejected') {
+        qualityUpdate.quality_passed = false;
+        qualityUpdate.rejection_reasons = [decision.reason];
+      }
       const analyzed =
-        decision.status === 'rejected'
-          ? await db.scanImages.update(image.id, {
-              quality_passed: false,
-              rejection_reasons: [decision.reason],
-            })
+        leafLighting || decision.status === 'rejected'
+          ? await db.scanImages.update(image.id, qualityUpdate)
           : image;
       const updated = await db.scans.setStatus(scan.id, decision.status);
       log.info(

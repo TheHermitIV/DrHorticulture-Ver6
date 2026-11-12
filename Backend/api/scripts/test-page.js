@@ -1,7 +1,7 @@
 // Serves the test pages in public/ on localhost and forwards their /api/* and /health requests to a
 // deployed api, so the browser sees one origin and needs no CORS (spec task 6.1 adds that to the
 // api). The deployed api runs the whole pipeline: every upload is a real scan in its Supabase
-// project. The pages' x-mock-scenario menu does nothing there, since production ignores it.
+// project. The mask editor processes files locally in the browser.
 //
 //   npm run test-page                                  # http://localhost:3000 -> production api
 //   npm run test-page -- --api http://localhost:4000 --port 3001
@@ -89,4 +89,5 @@ server.listen(Number(values.port), 'localhost', () => {
   console.log(`Forwarding /api/* and /health to ${api.origin}`);
   console.log(`  Upload:     ${base}/test.html`);
   console.log(`  Image data: ${base}/ImageData.html`);
+  console.log(`  Mask editor: ${base}/leaf-mask.html`);
 });

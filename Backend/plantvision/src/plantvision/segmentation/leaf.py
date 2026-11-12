@@ -99,6 +99,13 @@ class LeafSegmenter(SegmentationModel):
         detected = MIN_FRACTION <= fraction <= MAX_FRACTION
         indices = self.extractor.extract(rgb, mask) if detected else None
         ndvi = float(np.clip(self.intercept + self.coefficients @ indices.to_vector(), 0, .99)) if detected else 0.0
+        checks = {"angle_ok": True}
+        if detected:
+            luminance = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)[mask]
+            checks["leaf_lighting"] = {
+                "mean_luminance": round(float(luminance.mean()), 2),
+                "clipped_pct": round(100 * float((luminance >= 250).mean()), 2),
+            }
         return {
             "model_version": self.model_version,
             "segmentation": {"plant_detected": detected, "mask_confidence": 0.0,
@@ -108,5 +115,5 @@ class LeafSegmenter(SegmentationModel):
             # Single ridge head. Confidence stays zero until calibrated.
             "estimate": {"ndvi": round(ndvi, 6), "confidence": 0.0,
                          "ensemble_std": 0.0, "ensemble_size": 1},
-            "checks": {"angle_ok": True},
+            "checks": checks,
         }

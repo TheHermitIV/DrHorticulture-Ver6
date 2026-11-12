@@ -2,9 +2,9 @@
 
 ## LeafSegmenter
 
-The inference Docker image defaults to **LeafSegmenter v1.0.0** and its paired NDVI estimator.
+The inference Docker image defaults to **LeafSegmenter v1.1.0** and its paired NDVI estimator.
 Follow the [Railway deployment runbook](RAILWAY_DEPLOYMENT.md) for the rollout and smoke test.
-The approved artifact ships in the repo at `Backend/inference/weights/leaf-segmenter-v1.0.0.json`
+The default artifact ships in the repo at `Backend/inference/weights/leaf-segmenter-v1.1.0.json`
 and is copied into the image. To ship a new version, replace that file (and its `.gitignore` and
 `.dockerignore` exceptions if the name changes), or point `LEAF_SEGMENTER_MODEL_PATH` at a file on a mount.
 `GET /health` reports the loaded version. The API stores the NDVI estimate and abstains
@@ -31,14 +31,46 @@ from fertilizer advice while confidence calibration is pending.
 
    ```sh
    python Backend/inference/train_leaf_segmenter.py "/private/review-work" \
-     --model-version "LeafSegmenter v1.1.0" \
-     --output "/private/models/leaf-segmenter-v1.1.0.json"
+     --model-version "LeafSegmenter v1.2.0" \
+     --output "/private/models/leaf-segmenter-v1.2.0.json"
    ```
 
 5. Compare both model versions on the same held-out photos. Check mask overlap with
    reviewed masks, prediction coverage, and NDVI error against GreenSeeker where
    readings exist. The exporter checks that the JSON reproduces the fitted models.
    Use held-out results to decide whether to switch the Railway model path.
+
+### Train the NDVI model with more paired plants
+
+The original v1.0.0 ridge model was trained on 25 paired plants. A development comparison kept the
+segmenter fixed and trained the ridge model on 92 plants (the original 25 and 67 additional
+plants). On the same 30 held-out plants, mean absolute error decreased from **0.0495** to
+**0.0474 NDVI units**. The extra 67 plants had GreenSeeker readings, and the fixed segmenter
+supplied their masks. For a future model, keep the NDVI training and test split plant-disjoint
+and reserve a fresh test set before choosing confidence rules. A lower average error alone
+does not identify which estimates are unreliable.
+
+For v1.1.0, the same leaf mask trees and ridge feature set were used with **97 training
+plants and 25 test plants** (about 80/20). The test plants were selected with seed 7 from
+the previous 30-plant test cohort, preserving representation from both collections. On
+these 25 plants, mean absolute error decreased from **0.0506** to **0.0457 NDVI units**.
+Both models disagreed with the GreenSeeker side of the 0.50 cutoff on 2 of 25 plants.
+This is a development comparison on existing collections. Collect fresh plants for final
+validation.
+
+### Confidence experiments
+
+In five plant-disjoint folds on 25 reviewed masks, the 12 masks with the highest median
+foreground model score averaged **0.82** intersection over union with the reviewed masks.
+The other 13 averaged **0.47**. One of the top 12 still fell below **0.70** overlap, so this
+is a candidate ranking signal that needs validation on fresh reviewed masks.
+
+On 97 additional GreenSeeker plants, refitting the original ridge model with one training
+plant removed at a time produced a disagreement score that barely ranked absolute error
+(Spearman correlation **−0.07**). The shipped proof of concept still abstains from fertilizer
+advice. An exploratory margin of **0.10 NDVI** around the current **0.50** cutoff kept 65 of
+97 estimates, all on the same side of the cutoff as their GreenSeeker readings. This measures
+agreement with a numerical cutoff on existing data. It does not validate fertilizer advice.
 
 ### VARI candidate for NDVI
 

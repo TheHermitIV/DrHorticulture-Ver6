@@ -9,4 +9,5 @@ Front-End
 Assets
 Backend/inference/weights/*
 !Backend/inference/weights/leaf-segmenter-v1.0.0.json
+!Backend/inference/weights/leaf-segmenter-v1.1.0.json
 Backend/plantvision/data

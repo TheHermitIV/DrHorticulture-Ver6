@@ -24,6 +24,7 @@ Backend/supabase/.branches/
 Backend/inference/weights/*
 !Backend/inference/weights/.gitkeep
 !Backend/inference/weights/leaf-segmenter-v1.0.0.json
+!Backend/inference/weights/leaf-segmenter-v1.1.0.json
 
 # OS
 .DS_Store

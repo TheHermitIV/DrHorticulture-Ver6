@@ -293,7 +293,7 @@ The scan object is returned by every scan endpoint:
   "scan_id": "uuid",
   "species": "geranium",
   "status": "completed",
-  "image": { "id": "uuid", "url": "<signed URL, 1 h>", "quality": { "passed": true, "metrics": {} } },
+  "image": { "id": "uuid", "url": "<signed URL, 1 h>", "width": 1024, "height": 1024, "mime_type": "image/jpeg", "quality": { "passed": true, "metrics": {}, "rejection_reasons": [] } },
   "result": {
     "recommendation": "fertilize",
     "ndvi": 0.41,
@@ -302,6 +302,7 @@ The scan object is returned by every scan endpoint:
     "model_version": "stub-0.1",
     "config_version": 1
   },
+  "diagnostics": { "mask_confidence": 0.9, "leaf_fraction": 0.4, "latency_ms": 250, "model_version": "mock-0.1", "config_version": 1 },
   "created_at": "2026-10-01T15:04:05Z"
 }
 ```
@@ -390,6 +391,7 @@ Field rules (enforced by `api/src/inference/schema.js` on every response):
 | `estimate.ensemble_std` | number | ≥ 0 | Yes |
 | `estimate.ensemble_size` | integer | ≥ 1 | Yes |
 | `checks.angle_ok` | boolean | — | Yes |
+| `checks.leaf_lighting` | object | `mean_luminance` (0–255) and `clipped_pct` (0–100) for masked foliage | No |
 | `checks.calibration_card` | boolean | — | No (recorded only, not enforced) |
 
 - Every score and probability is 0 to 1, and the api never recomputes `confidence`.
@@ -463,24 +465,36 @@ The metrics are stored in `scan_images.quality_metrics` and returned as `image.q
 
 - `segmentation.plant_detected = false` → reject with `no_plant_detected` ("Center the plant and fill the frame").
 - Otherwise, `checks.angle_ok = false` → reject with `bad_angle` ("Shoot from above at the angle in the guide").
-- Tier B stops at the first failure, unlike Tier A: with no plant, the angle means nothing. Both checks are the first two rules of `decide()` below.
+- With `quality.lighting_scope = 'leaf'`, Tier A checks resolution and blur and
+  records whole-photo lighting. After plant and angle checks pass, Tier B applies
+  the configured brightness and clipping limits to `checks.leaf_lighting`.
+  Older inference versions omit the field, so the API falls back to the recorded
+  whole-photo lighting. An absent scope or `'image'` uses Tier A lighting checks.
+- Tier B reports the first failure in decision order.
+- Leaf lighting measurements are stored as `leaf_mean_luminance` and
+  `leaf_clipped_pct` in `scan_images.quality_metrics` when available.
 - A Tier B rejection still saves the `analyses` row, with `recommendation` null, for later study. It also sets `scan_images.quality_passed` to false, so the image reads as rejected like a Tier A failure.
 
 **Decision policy** (`api/src/services/decision.js`, a pure function). The inference service only returns numbers; this function makes every decision. The rules apply in order and the first match wins:
 
 1. `plant_detected = false` → `rejected`, `no_plant_detected` (Tier B)
 2. `angle_ok = false` → `rejected`, `bad_angle` (Tier B)
-3. `mask_confidence < mask_min` → `abstained`, `low_mask_confidence`
-4. `confidence < confidence_min` → `abstained`, `low_confidence`
-5. Otherwise `ndvi < ndvi_threshold` → `fertilize`, else `do_not_fertilize` (`completed`)
+3. In leaf lighting mode, a failed lighting check → `rejected` with its existing lighting reason
+4. `mask_confidence < mask_min` → `abstained`, `low_mask_confidence`
+5. `confidence < confidence_min` → `abstained`, `low_confidence`
+6. Otherwise `ndvi < ndvi_threshold` → `fertilize`, else `do_not_fertilize` (`completed`)
 
 ```js
 const reject = (reason) => ({ status: 'rejected', recommendation: null, reason });
 const abstain = (reason) => ({ status: 'abstained', recommendation: 'abstain', reason });
 
-export function decide({ segmentation: s, estimate: e, checks: c }, cfg) {
+export function decide({ segmentation: s, estimate: e, checks: c }, cfg, imageMetrics) {
   if (!s.plant_detected) return reject('no_plant_detected');
   if (!c.angle_ok) return reject('bad_angle');
+  if (cfg.quality.lighting_scope === 'leaf') {
+    const reason = lightingRejection(c.leaf_lighting ?? imageMetrics, cfg.quality);
+    if (reason) return reject(reason);
+  }
   if (s.mask_confidence < cfg.mask_min) return abstain('low_mask_confidence');
   if (e.confidence < cfg.confidence_min) return abstain('low_confidence');
   return {
@@ -541,7 +555,7 @@ Infrastructure settings live in env vars; product thresholds live in the `decisi
 | `ML_WEIGHTS_PATH` | inference | `/app/inference/weights/model.json` | JSON bundle written by `training/ndvi/pipeline.py`; unset means stub values |
 | `CV_ENGINE` | inference | `stub` | Local feature pipeline selector when LeafSegmenter mode is off |
 | `LEAF_SEGMENTER_ENABLED` | inference | `true` in Docker | Loads LeafSegmenter and its paired NDVI estimator |
-| `LEAF_SEGMENTER_MODEL_PATH` | inference | unset (`inference/weights/leaf-segmenter-v1.0.0.json`, in the image) | Optional override, such as a file on a mounted volume |
+| `LEAF_SEGMENTER_MODEL_PATH` | inference | unset (`inference/weights/leaf-segmenter-v1.1.0.json`, in the image) | Optional override, such as a file on a mounted volume |
 
 Locally, run the api with `INFERENCE_MODE=mock` so it needs nothing but Supabase. The inference service can also run locally on port 8000, with `INFERENCE_URL=http://localhost:8000` and the same `INFERENCE_API_KEY` on both sides, to test `remote` mode.
 

@@ -1,4 +1,4 @@
-# LeafSegmenter inference. The model ships in the image at inference/weights/leaf-segmenter-v1.0.0.json;
+# LeafSegmenter inference. The default model ships at inference/weights/leaf-segmenter-v1.1.0.json;
 # LEAF_SEGMENTER_MODEL_PATH overrides it.
 # Build context is the repo root, so the image can include Backend/plantvision/:
 #   docker build -f Backend/inference/Dockerfile .

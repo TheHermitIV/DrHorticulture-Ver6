@@ -78,6 +78,14 @@
           "required": ["angle_ok"],
           "properties": {
             "angle_ok": { "type": "boolean" },
+            "leaf_lighting": {
+              "type": "object",
+              "required": ["mean_luminance", "clipped_pct"],
+              "properties": {
+                "mean_luminance": { "type": "number", "minimum": 0, "maximum": 255 },
+                "clipped_pct": { "type": "number", "minimum": 0, "maximum": 100 }
+              }
+            },
             "calibration_card": {
               "type": "boolean",
               "description": "Recorded only, not enforced. Optional: no CV function produces it yet."
