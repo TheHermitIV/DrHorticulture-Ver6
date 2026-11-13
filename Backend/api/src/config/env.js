@@ -37,6 +37,8 @@ const envSchema = z
     RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(30),
     ADMIN_API_KEY: z.string().min(16),
     AUTH_REQUIRED: booleanString,
+    LOGIN_USERNAME: z.string().min(1).optional(),
+    LOGIN_PASSWORD: z.string().min(1).optional(),
   })
   .refine(...requiredInRemoteMode('INFERENCE_URL'))
   .refine(...requiredInRemoteMode('INFERENCE_API_KEY'));

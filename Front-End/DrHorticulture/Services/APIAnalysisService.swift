@@ -3,20 +3,7 @@ import Foundation
 /// Talks to the live backend: `POST /api/v1/scans` as multipart with a
 /// optional `species` field and one JPEG in `image`.
 struct APIAnalysisService: AnalysisService {
-    private static let productionURL = URL(string: "https://drhorticulture-ver6-production.up.railway.app")!
-    var baseURL: URL? = APIAnalysisService.configuredBaseURL(
-        Bundle.main.object(forInfoDictionaryKey: "APIBaseURL") as? String
-    )
-
-    static func configuredBaseURL(_ value: String?) -> URL? {
-        let value = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !value.isEmpty else { return productionURL }
-        guard let url = URL(string: value), url.scheme?.lowercased() == "https",
-              let host = url.host, !host.isEmpty, url.user == nil, url.password == nil,
-              url.query == nil, url.fragment == nil
-        else { return nil }
-        return url
-    }
+    var baseURL: URL? = APIConfig.baseURL
 
     func analyze(imageData: Data, species: String) async throws -> Scan {
         guard let baseURL else {

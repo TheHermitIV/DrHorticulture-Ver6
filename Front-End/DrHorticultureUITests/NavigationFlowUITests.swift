@@ -4,8 +4,7 @@ import XCTest
 final class NavigationFlowUITests: XCTestCase {
     private func launch() -> XCUIApplication {
         continueAfterFailure = false
-        let app = XCUIApplication()
-        app.launch()
+        let app = XCUIApplication.launchSignedIn()
         return app
     }
 
@@ -25,7 +24,7 @@ final class NavigationFlowUITests: XCTestCase {
     func testScanTabOffersASavedPhotoAndTheSample() {
         let app = launch()
 
-        app.tabBars.firstMatch.buttons["Scan"].tap()
+        app.openTab("Scan")
 
         // Queried type-agnostically: SwiftUI decides the element type for a
         // combined accessibility container, and it is not part of the contract.
@@ -49,7 +48,7 @@ final class NavigationFlowUITests: XCTestCase {
     func testWalksScanToResults() {
         let app = launch()
 
-        app.tabBars.firstMatch.buttons["Scan"].tap()
+        app.openTab("Scan")
         app.buttons["capture.sampleButton"].tap()
 
         XCTAssertTrue(app.staticTexts["preview.title"].waitForExistence(timeout: 10))
@@ -62,7 +61,7 @@ final class NavigationFlowUITests: XCTestCase {
     func testRetakeFromPreviewReturnsToCapture() {
         let app = launch()
 
-        app.tabBars.firstMatch.buttons["Scan"].tap()
+        app.openTab("Scan")
         app.buttons["capture.sampleButton"].tap()
         XCTAssertTrue(app.staticTexts["preview.title"].waitForExistence(timeout: 10))
 
@@ -93,7 +92,7 @@ final class NavigationFlowUITests: XCTestCase {
     func testSettingsTabSaysThresholdsLiveInTheBackend() {
         let app = launch()
 
-        app.tabBars.firstMatch.buttons["Settings"].tap()
+        app.openTab("Settings")
 
         let note = app.descendants(matching: .any)
             .matching(identifier: "settings.thresholdNote").firstMatch
@@ -103,7 +102,7 @@ final class NavigationFlowUITests: XCTestCase {
     func testScanTabDoesNotAskForSpecies() {
         let app = launch()
 
-        app.tabBars.firstMatch.buttons["Scan"].tap()
+        app.openTab("Scan")
 
         let viewfinder = app.descendants(matching: .any)
             .matching(identifier: "capture.viewfinder").firstMatch
