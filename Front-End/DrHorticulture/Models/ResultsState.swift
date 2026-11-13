@@ -1,18 +1,20 @@
 import Foundation
 
 /// What the Results screen shows. Derived purely from a decoded `Scan`, so the
-/// three states are testable without building a view.
+/// states are testable without building a view.
 enum ResultsState: Equatable {
     /// The backend's call, with the reading behind it.
     case recommendation(Recommendation, ndvi: Double, confidence: Double)
     /// A usable reading the backend did not turn into a call.
     case reading(ndvi: Double, confidence: Double)
+    /// An estimate with an explicit decision to withhold fertilizer advice.
+    case estimateWithoutRecommendation(ndvi: Double, reason: String)
     /// No reliable answer — ask for another photo.
     case abstention(reason: String, hints: [String] = [])
 }
 
 /// The backend's `recommendation` enum. `abstain` is deliberately not a case
-/// here: it maps to `ResultsState.abstention`.
+/// here: it maps to a result without fertilizer advice.
 enum Recommendation: String, Equatable {
     case fertilize
     case doNotFertilize = "do_not_fertilize"
@@ -61,13 +63,17 @@ enum AbstentionReason {
 }
 
 extension ResultsState {
-    /// Maps a scan onto one of the three Results states.
+    /// Maps a scan onto a Results state.
     ///
     /// The backend owns the decision: it has already applied the active
     /// `decision_config` thresholds, so the app reads `recommendation` rather
     /// than comparing `confidence` against a local threshold.
     init(scan: Scan) {
-        guard let result = scan.result else {
+        let status = scan.scanStatus
+        guard status != .rejected, status != .failed,
+              status != .uploaded, status != .processing,
+              let result = scan.result
+        else {
             self = .abstention(
                 reason: AbstentionReason.copy(for: scan.scanStatus),
                 hints: []
@@ -79,8 +85,18 @@ extension ResultsState {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
 
-        if raw == "abstain" {
-            self = .abstention(reason: AbstentionReason.copy(for: result.abstainReason))
+        if raw == "abstain" || status == .abstained {
+            let reason = AbstentionReason.copy(for: result.abstainReason)
+            if let ndvi = result.ndvi, (-1.0...1.0).contains(ndvi) {
+                self = .estimateWithoutRecommendation(
+                    ndvi: ndvi,
+                    reason: reason == AbstentionReason.generic
+                        ? "The estimate is available for reference."
+                        : reason
+                )
+            } else {
+                self = .abstention(reason: reason)
+            }
             return
         }
 

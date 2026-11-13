@@ -4,10 +4,13 @@ import Foundation
 enum APIConfig {
     static let productionURL = URL(string: "https://drhorticulture-ver6-production.up.railway.app")!
 
-    // TODO(decision): move to build configuration
-    /// Debug builds can point at a backend on your Mac by adding the launch argument
+    /// The backend both services talk to; `nil` when the configured address is invalid.
+    ///
+    /// Comes from the `DRHORTICULTURE_API_BASE_URL` build setting (through the
+    /// `APIBaseURL` Info.plist key), or production when it is empty. Debug builds
+    /// can also point at a backend on your Mac with the launch argument
     /// `-APIBaseURL http://<your-mac-ip>:3000` in the Xcode scheme.
-    static var baseURL: URL {
+    static var baseURL: URL? {
         #if DEBUG
         if let override = UserDefaults.standard.string(forKey: "APIBaseURL"),
             let url = URL(string: override)
@@ -15,7 +18,18 @@ enum APIConfig {
             return url
         }
         #endif
-        return productionURL
+        return configuredBaseURL(Bundle.main.object(forInfoDictionaryKey: "APIBaseURL") as? String)
+    }
+
+    /// An empty value means production; anything else must be a plain `https` URL.
+    static func configuredBaseURL(_ value: String?) -> URL? {
+        let value = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !value.isEmpty else { return productionURL }
+        guard let url = URL(string: value), url.scheme?.lowercased() == "https",
+              let host = url.host, !host.isEmpty, url.user == nil, url.password == nil,
+              url.query == nil, url.fragment == nil
+        else { return nil }
+        return url
     }
 
     /// Debug builds launched with `-useMockServices YES` (the UI tests do) skip the

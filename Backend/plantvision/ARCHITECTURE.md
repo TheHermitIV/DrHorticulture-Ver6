@@ -83,7 +83,7 @@ The MVP therefore focuses on the engineering pipeline rather than scientific val
 
 - RGB image input
 - Image validation
-- YOLO26-seg integration
+- LeafSegmenter integration
 - Leaf/plant segmentation
 - Combined leaf mask
 - RGB feature extraction
@@ -231,7 +231,7 @@ This keeps the application independent of the first modeling choice.
                                |
                                v
                     +----------------------+
-                    |    YOLO26-seg        |
+                    |    LeafSegmenter        |
                     |  Segmentation Model  |
                     +----------+-----------+
                                |
@@ -470,33 +470,7 @@ Location:
 src/plantvision/segmentation/
 ```
 
-The initial segmentation architecture assumes:
-
-> **YOLO26-seg**
-
-The segmentation component should be treated as a model-backed service inside the application.
-
-## Model Strategy
-
-The standard pretrained YOLO26-seg model may not directly provide a dedicated `leaf` class.
-
-The intended production approach is therefore:
-
-1. Start with `yolo26s-seg.pt` or the selected YOLO26-seg checkpoint.
-2. Test the pretrained model as an initial feasibility experiment.
-3. Collect representative plant images.
-4. Annotate leaf regions.
-5. Train a custom one-class segmentation model where:
-
-```text
-0 = leaf
-```
-
-6. Use the resulting fine-tuned model for production inference.
-
-The application should not hard-code assumptions about the model's internal classes.
-
-Instead, segmentation configuration should define which class or classes are considered relevant.
+LeafSegmenter uses gradient-boosted trees to label target foliage pixels from color, local contrast, and position. See the [training handoff](../docs/ML_TRAINING_HANDOFF.md) for the private review workspace and export process.
 
 ---
 
@@ -527,13 +501,10 @@ Example:
 Original Image
       |
       v
-YOLO26-seg detections
+LeafSegmenter
       |
       v
-Individual segmentation masks
-      |
-      v
-Combined Leaf Mask
+Binary Leaf Mask
       |
       v
 RGB feature extraction
@@ -1221,20 +1192,7 @@ The integration test should use a small fixture image/model or a mocked model wh
 
 Segmentation training:
 
-```text
-training/segmentation/
-├── prepare_dataset.py
-├── train.py
-├── validate.py
-└── export.py
-```
-
-Responsibilities:
-
-- prepare YOLO segmentation dataset
-- train/fine-tune YOLO26-seg
-- validate segmentation
-- export the selected model
+Train and export LeafSegmenter with `Backend/inference/train_leaf_segmenter.py`.
 
 NDVI training:
 
@@ -1274,9 +1232,7 @@ models/
 
 The configuration should point to the active model.
 
-For the MVP, the segmentation model may be a downloaded YOLO26-seg checkpoint.
-
-For the complete system, it should eventually be the task-specific fine-tuned segmentation checkpoint.
+LeafSegmenter loads a privately provisioned JSON model trained on reviewed leaf masks.
 
 ---
 
@@ -1287,7 +1243,7 @@ The exact versions should be pinned or constrained in `pyproject.toml`.
 Expected categories include:
 
 - Python
-- Ultralytics / YOLO
+- OpenCV
 - PyTorch
 - OpenCV or Pillow
 - NumPy
@@ -1327,7 +1283,7 @@ Implement image loading and validation.
 
 ## Step 3 — Segmentation
 
-Implement the YOLO26-seg interface and inference pipeline.
+Wire LeafSegmenter into the inference pipeline.
 
 Initially test the pretrained checkpoint as a feasibility experiment.
 
@@ -1365,7 +1321,7 @@ When sensor data becomes available, implement metadata association and ground-tr
 
 ## Step 11 — Train Segmentation
 
-Fine-tune YOLO26-seg on representative leaf annotations.
+Retrain LeafSegmenter on representative leaf annotations.
 
 ## Step 12 — Train NDVI Model
 
@@ -1389,7 +1345,7 @@ The MVP is considered successful when:
 A local RGB plant image
         |
         v
-YOLO26-seg
+LeafSegmenter
         |
         v
 Leaf region
@@ -1443,7 +1399,7 @@ The final intended system is:
                        Image Loader
                               |
                               v
-                       YOLO26-seg
+                       LeafSegmenter
                               |
                               v
                         Leaf Mask

@@ -33,6 +33,13 @@ struct ScanSessionTests {
         #expect(session.photo?.source == .camera)
     }
 
+    @Test func darkSmallPhotoShowsWarningsAndRemainsAvailableForAnalysis() throws {
+        let photo = try #require(CapturedPhoto(image: solidImage(color: .black), source: .photoLibrary))
+        #expect(photo.qualityHints.contains { $0.contains("looks dark") })
+        #expect(photo.qualityHints.contains { $0.contains("photo is small") })
+        #expect(!photo.data.isEmpty)
+    }
+
     @Test func clearingRemovesThePhoto() throws {
         let session = ScanSession()
         session.accept(try #require(CapturedPhoto(image: solidImage(), source: .photoLibrary)))
@@ -76,19 +83,10 @@ struct ScanSessionTests {
         #expect(CapturedPhoto(image: UIImage(), source: .camera) == nil)
     }
 
-    // MARK: - Species, required by POST /api/v1/scans
+    // MARK: - Optional species hint
 
-    @Test func startsWithAFallbackSpecies() {
-        #expect(ScanSession().species == PlantSpecies.fallback)
-        #expect(PlantSpecies.options.contains(PlantSpecies.fallback))
-    }
-
-    @Test func speciesOptionsAreNonEmptyAndWithinTheColumnLimit() {
-        #expect(!PlantSpecies.options.isEmpty)
-        for name in PlantSpecies.options {
-            #expect(!name.isEmpty)
-            #expect(name.count <= 64)
-        }
+    @Test func startsWithoutASpeciesHint() {
+        #expect(ScanSession().species.isEmpty)
     }
 
     /// A retake is the same plant, so clearing the photo must not clear the

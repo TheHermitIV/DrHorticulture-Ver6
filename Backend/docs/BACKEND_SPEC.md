@@ -68,7 +68,7 @@ The backend is Node.js 24 LTS + Express 5 on Railway, with Supabase for Postgres
 | Job queue (only if needed) | `pg-boss` | Railway `worker` | Only if p95 latency exceeds 15 s (see Action plan) |
 | Inference service | Python 3.12 + Flask + gunicorn, with stub CV and ML stages | Any host (see Hosting and budget) | The ML team may switch to FastAPI; the contract stays the same |
 | Inference image handling | `numpy` + `Pillow` | `inference` | Pillow decodes the downloaded image into the RGB `uint8` array the `cv.analyze` seam takes |
-| CV stage (`CV_ENGINE=plantvision`) | PlantVision (`plantvision/`) with CPU `torch`, `torchvision`, `ultralytics`, `transformers` (`inference/requirements-cv.txt`) | `inference` Docker image | YOLO11n-seg and the OpenPlants species classifier; not needed for the stub or in CI |
+| Leaf and NDVI inference | PlantVision LeafSegmenter and OpenCV | `inference` Docker image | The trained artifact is supplied privately at runtime |
 | Database | Supabase Postgres | Supabase | Schema managed with Supabase CLI migrations |
 | File storage | Supabase Storage, private bucket `scan-images` | Supabase | Access only via signed URLs |
 | Auth (optional) | Supabase Auth (JWT) | Supabase | Off by default; see Open decisions |
@@ -153,7 +153,7 @@ Backend/
 │  ├─ app.py                     # Flask: POST /v1/analyze, GET /health; key check, download, assembles response
 │  ├─ cv/                        # CV stage; seam: cv.analyze(image) -> dict
 │  │  ├─ __init__.py             # analyze(): runs detector, embedder, features
-│  │  ├─ detector.py             # YOLO-seg → mask, mask_confidence, leaf_fraction, plant_detected, angle_ok
+│  │  ├─ detector.py             # LeafSegmenter → mask, mask_confidence, leaf_fraction, plant_detected, angle_ok
 │  │  ├─ embedder.py             # backbone → embedding; species classifier → species_probs
 │  │  └─ features.py             # VARI, ExG, GLI, NGRDI on masked pixels
 │  ├─ ml/                        # ML stage; seam: ml.predict(features, species_probs) -> dict
@@ -294,7 +294,7 @@ The scan object is returned by every scan endpoint:
   "scan_id": "uuid",
   "species": "geranium",
   "status": "completed",
-  "image": { "id": "uuid", "url": "<signed URL, 1 h>", "quality": { "passed": true, "metrics": {} } },
+  "image": { "id": "uuid", "url": "<signed URL, 1 h>", "width": 1024, "height": 1024, "mime_type": "image/jpeg", "quality": { "passed": true, "metrics": {}, "rejection_reasons": [] } },
   "result": {
     "recommendation": "fertilize",
     "ndvi": 0.41,
@@ -303,6 +303,7 @@ The scan object is returned by every scan endpoint:
     "model_version": "stub-0.1",
     "config_version": 1
   },
+  "diagnostics": { "mask_confidence": 0.9, "leaf_fraction": 0.4, "latency_ms": 250, "model_version": "mock-0.1", "config_version": 1 },
   "created_at": "2026-10-01T15:04:05Z"
 }
 ```
@@ -344,7 +345,7 @@ v1 was revised in place on 2026-10-01, because no inference service was live yet
 
 **What the models do** (owned by the ML team; the backend treats them as a black box):
 
-1. YOLO-seg, LoRA fine-tuned, segments the canopy and masks out petals, pot, and soil.
+1. LeafSegmenter classifies pixels as target foliage or background. The deployed model estimates NDVI from features inside the mask and reports zero confidence pending calibration. Steps 2–5 describe the general training path.
 2. A frozen pretrained CNN backbone turns the image into an embedding. **Deferred:** at the current dataset size the first model uses the CV color features as its representation, so the embedding stays a placeholder until a backbone is justified.
 3. A pretrained species classifier (external, not trained by the team) reads the image and outputs a probability distribution over species.
 4. Shallow regression heads (ridge, GBM, or a small MLP) take the color features plus the species probabilities and estimate NDVI.
@@ -391,6 +392,7 @@ Field rules (enforced by `api/src/inference/schema.js` on every response):
 | `estimate.ensemble_std` | number | ≥ 0 | Yes |
 | `estimate.ensemble_size` | integer | ≥ 1 | Yes |
 | `checks.angle_ok` | boolean | — | Yes |
+| `checks.leaf_lighting` | object | `mean_luminance` (0–255) and `clipped_pct` (0–100) for masked foliage | No |
 | `checks.calibration_card` | boolean | — | No (recorded only, not enforced) |
 
 - Every score and probability is 0 to 1, and the api never recomputes `confidence`.
@@ -422,14 +424,14 @@ def predict(features, species_probs) -> dict:
     # keys: ndvi (mean of the ensemble heads), ensemble_std, confidence
 ```
 
-- `cv/detector.py`: YOLO-seg → `mask`, `mask_confidence`, `leaf_fraction`, `plant_detected`, `angle_ok`.
+- `cv/detector.py`: LeafSegmenter → `mask`, `mask_confidence`, `leaf_fraction`, `plant_detected`, `angle_ok`.
 - `cv/embedder.py`: backbone → `embedding` (placeholder until a backbone is chosen); species classifier → `species_probs`. It also defines `SPECIES_LABELS` (length K), which `app.py` uses to turn `species_probs` into `species.top_label` and `species.top_prob`.
 - `cv/features.py`: VARI, ExG, GLI, NGRDI and the other color indices on the masked pixels. These are the ML stage's representation for now.
 - `ml/regressor.py`: loads a trained JSON bundle (`ML_WEIGHTS_PATH`, format in `ml/bundle.py`) and runs its ensemble heads → `ndvi`, `ensemble_std`, `confidence`. `ENSEMBLE_SIZE` comes from the bundle, reported as `estimate.ensemble_size`. With no bundle it returns the stub values.
 - `app.py` handles HTTP, the key check, request validation, and the image download; calls `cv.analyze`, then `ml.predict(cv_out["features"], cv_out["species_probs"])`; and assembles the v1 response. `mask` and `embedding` never leave the service.
 - Training writes the bundle: `python -m training.ndvi.pipeline --images … --labels … --out …` (see `docs/ML_TRAINING_HANDOFF.md`). It extracts features through the same `cv.analyze` path, so training and serving cannot drift.
 - `SPECIES_LABELS` and `ENSEMBLE_SIZE` are `TODO(decision):` additions. The seams return neither the label names nor the head count, and the response needs both.
-- `CV_ENGINE` picks the CV implementation at import: `stub` (the default; hardcoded values, numpy only) or `plantvision` (the CV files call PlantVision's predictors, built from `inference/Dockerfile` with the repo root as build context). The ML stage is still the stub either way.
+- The inference Docker image loads LeafSegmenter and its NDVI estimator at startup. For local development, `CV_ENGINE` selects `stub` or the standalone `plantvision` feature pipeline when `LEAF_SEGMENTER_ENABLED` is off.
 - The stubs keep their own copy of the example values. A test checks the stub service's full response against `contracts/inference.v1.example.json`, so they cannot drift.
 
 The `api` mock adapter returns the example file above, with `model_version` set to `mock-0.1`. For tests it can be forced to return low confidence, no plant, or an error through the `x-mock-scenario` header, which is honored only when `NODE_ENV` is not `production`. An unknown scenario name returns 400 `VALIDATION_ERROR` before anything is stored.
@@ -464,24 +466,36 @@ The metrics are stored in `scan_images.quality_metrics` and returned as `image.q
 
 - `segmentation.plant_detected = false` → reject with `no_plant_detected` ("Center the plant and fill the frame").
 - Otherwise, `checks.angle_ok = false` → reject with `bad_angle` ("Shoot from above at the angle in the guide").
-- Tier B stops at the first failure, unlike Tier A: with no plant, the angle means nothing. Both checks are the first two rules of `decide()` below.
+- With `quality.lighting_scope = 'leaf'`, Tier A checks resolution and blur and
+  records whole-photo lighting. After plant and angle checks pass, Tier B applies
+  the configured brightness and clipping limits to `checks.leaf_lighting`.
+  Older inference versions omit the field, so the API falls back to the recorded
+  whole-photo lighting. An absent scope or `'image'` uses Tier A lighting checks.
+- Tier B reports the first failure in decision order.
+- Leaf lighting measurements are stored as `leaf_mean_luminance` and
+  `leaf_clipped_pct` in `scan_images.quality_metrics` when available.
 - A Tier B rejection still saves the `analyses` row, with `recommendation` null, for later study. It also sets `scan_images.quality_passed` to false, so the image reads as rejected like a Tier A failure.
 
 **Decision policy** (`api/src/services/decision.js`, a pure function). The inference service only returns numbers; this function makes every decision. The rules apply in order and the first match wins:
 
 1. `plant_detected = false` → `rejected`, `no_plant_detected` (Tier B)
 2. `angle_ok = false` → `rejected`, `bad_angle` (Tier B)
-3. `mask_confidence < mask_min` → `abstained`, `low_mask_confidence`
-4. `confidence < confidence_min` → `abstained`, `low_confidence`
-5. Otherwise `ndvi < ndvi_threshold` → `fertilize`, else `do_not_fertilize` (`completed`)
+3. In leaf lighting mode, a failed lighting check → `rejected` with its existing lighting reason
+4. `mask_confidence < mask_min` → `abstained`, `low_mask_confidence`
+5. `confidence < confidence_min` → `abstained`, `low_confidence`
+6. Otherwise `ndvi < ndvi_threshold` → `fertilize`, else `do_not_fertilize` (`completed`)
 
 ```js
 const reject = (reason) => ({ status: 'rejected', recommendation: null, reason });
 const abstain = (reason) => ({ status: 'abstained', recommendation: 'abstain', reason });
 
-export function decide({ segmentation: s, estimate: e, checks: c }, cfg) {
+export function decide({ segmentation: s, estimate: e, checks: c }, cfg, imageMetrics) {
   if (!s.plant_detected) return reject('no_plant_detected');
   if (!c.angle_ok) return reject('bad_angle');
+  if (cfg.quality.lighting_scope === 'leaf') {
+    const reason = lightingRejection(c.leaf_lighting ?? imageMetrics, cfg.quality);
+    if (reason) return reject(reason);
+  }
   if (s.mask_confidence < cfg.mask_min) return abstain('low_mask_confidence');
   if (e.confidence < cfg.confidence_min) return abstain('low_confidence');
   return {
@@ -542,7 +556,9 @@ Infrastructure settings live in env vars; product thresholds live in the `decisi
 | `LOGIN_PASSWORD` | api | (secret) | Its password; never logged or sent to clients |
 | `MODEL_VERSION` | inference | `stub-0.1` | Returned in every response; a non-stub value requires `ML_WEIGHTS_PATH` |
 | `ML_WEIGHTS_PATH` | inference | `/app/inference/weights/model.json` | JSON bundle written by `training/ndvi/pipeline.py`; unset means stub values |
-| `CV_ENGINE` | inference | `stub` | `stub` or `plantvision`; the Dockerfile sets `plantvision` |
+| `CV_ENGINE` | inference | `stub` | Local feature pipeline selector when LeafSegmenter mode is off |
+| `LEAF_SEGMENTER_ENABLED` | inference | `true` in Docker | Loads LeafSegmenter and its paired NDVI estimator |
+| `LEAF_SEGMENTER_MODEL_PATH` | inference | unset (`inference/weights/leaf-segmenter-v1.1.0.json`, in the image) | Optional override, such as a file on a mounted volume |
 
 Locally, run the api with `INFERENCE_MODE=mock` so it needs nothing but Supabase. The inference service can also run locally on port 8000, with `INFERENCE_URL=http://localhost:8000` and the same `INFERENCE_API_KEY` on both sides, to test `remote` mode.
 
@@ -550,10 +566,10 @@ Locally, run the api with `INFERENCE_MODE=mock` so it needs nothing but Supabase
 
 - Only `api` must live on Railway, on the Hobby plan ($5/month, no overage). It runs small and always on.
 - `inference` runs on Railway as its own service that sleeps when idle, built from `Backend/inference/Dockerfile` with the repo root as the build context (config: `Backend/inference/railway.json`). The api only knows `INFERENCE_URL`, so the host can still change.
-- The image bakes in PlantVision's YOLO weights and downloads the species classifier (~390 MB) at build time, so a cold start loads models but downloads nothing.
+- The image loads LeafSegmenter from a private runtime mount. Provision the file before rolling out the image.
 - `inference` may be reachable from the internet, so it requires the `x-inference-key` header (`INFERENCE_API_KEY`, set on both services). Use `https://` for `INFERENCE_URL` whenever the traffic leaves a private network, so the key and the signed image URL are never sent in clear text.
 - `inference` wakes on an upload and sleeps afterwards. Expect a 10–30 s cold start and under 1 s warm, on CPU with no GPU, and 0.8–1.5 GB of RAM once the models are loaded.
-- Model weights under 50 MB are committed in `inference/weights/`. Larger weights live in a Supabase bucket and are downloaded at startup. `TODO(decision):` how, given that `inference` holds no Supabase keys (see Open decisions).
+- Keep LeafSegmenter weights in private storage and provision them on the inference service. Inference needs no Supabase service role key.
 - Keep `INFERENCE_MODE=mock` during development.
 
 ## Action plan
@@ -706,14 +722,14 @@ Every open decision has a working default, so none of them blocks the build. Whe
 | JavaScript vs TypeScript | Backend | JavaScript (ES modules) |
 | Calibration card required in photos? | Product Owner | Not required. `checks.calibration_card` is optional and recorded only; no CV function produces it yet |
 | Range of `estimate.ndvi` | ML team + Backend | -1 to 1 (the physical range), so an overshooting regression head does not fail the scan; GreenSeeker ground truth is 0.00–0.99. Narrow to 0–1 if the team prefers |
-| Source of `mask_confidence` | ML team | Comes from YOLO-seg in `cv/detector.py`; how per-detection scores are combined (max vs. area-weighted mean) is the ML team's call |
+| Source of `mask_confidence` | ML team | LeafSegmenter reports zero while mask confidence is uncalibrated |
 | No plant found in the CV stage | ML team | Return 200 with `plant_detected: false` and every required field filled in (placeholders are fine), so the scan is `rejected` rather than `failed` |
 | Showing the predicted species to the client | Product Owner + Team | Not shown. `species.top_label` and `top_prob` are stored in `analyses.raw_response` only; the scan object returns the species the client sent |
 | Species label names and ensemble size | ML team | `cv/embedder.py` defines `SPECIES_LABELS` and `ml/regressor.py` defines `ENSEMBLE_SIZE`, because the seams return neither |
 | Representation, species count K, ensemble form, weight file sizes | ML team | Color features + species probabilities for the first model; a frozen-backbone embedding is deferred. Several bootstrap ridge heads; the bundle format is `ml/bundle.py` |
 | Where `inference` is hosted | Team | Railway, as a separate service that sleeps when idle; the api only needs `INFERENCE_URL` and `INFERENCE_API_KEY` |
 | Downloading large weights | ML team + Backend | Undecided. Weights over 50 MB go in a Supabase bucket, but `inference` holds no Supabase keys; options include a public `model-weights` bucket or a long-lived signed URL in an env var. It must never get the service-role key. Models load at import time, so the host's health check passes only after loading |
-| Packaging PlantVision into `inference` | ML team + Backend | A Dockerfile built from the repo root installs `plantvision/` (unmodified, editable) into the image; `cv/detector.py`, `cv/embedder.py`, and `cv/features.py` call its predictors when `CV_ENGINE=plantvision`. Until the ML team picks them: `mask_confidence` is the highest detection score, `angle_ok` is always true, and the embedding is a zero placeholder (the first model consumes the color features) |
+| Packaging PlantVision into `inference` | ML team + Backend | A Dockerfile built from the repo root installs `plantvision/` (unmodified, editable) into the image; `cv/detector.py`, `cv/embedder.py`, and `cv/features.py` call its predictors when `CV_ENGINE=plantvision`. The Docker service uses the paired LeafSegmenter estimator. The standalone pipeline keeps the species classifier and placeholder embedding |
 
 **Assumptions**
 
@@ -740,7 +756,7 @@ Every open decision has a working default, so none of them blocks the build. Whe
 | 2026-10-01 | `ground_truth.spad` removed (migration `0003`); ground truth is GreenSeeker NDVI only | ML team: SPAD is not collected |
 | 2026-10-01 | Tier B checks moved into `decide()` as rules 1–2 of one ordered policy; `decide()` now returns `status` and `reason` | The ML team's hard rules list Tier B and the thresholds as one ordered policy |
 | 2026-10-01 | `numpy` and `Pillow` added to the Tech stack for `inference` | The `cv.analyze(image: np.ndarray)` seam needs an RGB array, so the service must decode the downloaded image; PlantVision already uses both |
-| 2026-10-02 | `inference` hosted on Railway; the CV stage wired to PlantVision behind `CV_ENGINE`; `torch`, `torchvision`, `ultralytics`, `transformers` added for that image | The team picked Railway and wants real CV output before the ML model exists. `CV_ENGINE` (unlike the removed `CV_MODEL`) only switches between the stub and PlantVision inside the same seam files, so CI and local development run without torch |
+| 2026-10-02 | `inference` hosted on Railway; the CV stage wired to PlantVision behind `CV_ENGINE`; species and CV dependencies added for that image | The team picked Railway and wants real CV output before the ML model exists. `CV_ENGINE` (unlike the removed `CV_MODEL`) only switches between the stub and PlantVision inside the same seam files, so CI and local development run without torch |
 | 2026-10-01 | Inference layout changed to the seams `cv.analyze` and `ml.predict` (`cv/detector.py`, `cv/embedder.py`, `cv/features.py`, `ml/regressor.py`); `pipeline.py`, `base.py`/`stub.py`, `CV_MODEL`, and `ML_MODEL` removed | ML team's layout: teammates replace only function bodies |
 | 2026-10-01 | `inference` may run on any host; new env var `INFERENCE_API_KEY` on both services; `INFERENCE_TIMEOUT_MS` default 30000 → 60000; timeouts are retried once; new Hosting and budget section; Phase 4 rewritten | Only the api must live on Railway (Hobby, $5/month); inference sleeps when idle and has a 10–30 s cold start |
 | 2026-10-01 | Open decisions updated; the iOS client timeout added to Assumptions | Follow-ups from the ML context |
@@ -749,3 +765,4 @@ Every open decision has a working default, so none of them blocks the build. Whe
 | 2026-10-03 | Backend files moved under `Backend/`; the iOS app (`ios/`) renamed `Front-End/`; the README, license, `Assets/`, and `.github/` stay at the repo root. The api's Railway root directory becomes `/Backend/api`, and inference's config file `Backend/inference/railway.json` | Owner's restructure: one folder per side of the product at the root. Paths inside `Backend/` are unchanged |
 | 2026-10-15 | `POST /api/v1/auth/login` and env vars `LOGIN_USERNAME`, `LOGIN_PASSWORD` added | The app needs a login screen now. One shared account from env is the simplest version; it issues no token and the scan routes stay open until real auth (task 6.2) is decided |
 | 2026-10-31 | ML seam is now `ml.predict(features, species_probs)`; added the JSON model bundle (`inference/ml/bundle.py`), `ML_WEIGHTS_PATH`, and the offline training pipeline (`plantvision/training/ndvi/pipeline.py`) with a greenness post-adjustment in the bundle | At the current dataset size the CV color features are the model's representation; the frozen-backbone embedding is deferred. The HTTP v1 response and `decide()` are unchanged |
+| 2026-11-10 | The LeafSegmenter model (`inference/weights/leaf-segmenter-v1.0.0.json`) is committed and baked into the inference image; `LEAF_SEGMENTER_MODEL_PATH` becomes an optional override | Owner's decision: deploy by switching the Railway branch alone, with no volume or upload step. The model is now public with the repo |

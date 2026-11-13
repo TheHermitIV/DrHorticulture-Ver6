@@ -22,7 +22,7 @@ the proxy as NDVI).
 # Setup (first time), from plantvision/
 python -m venv .venv
 .venv/Scripts/python -m pip install -e ".[dev]"      # light: enough to run the test suite
-.venv/Scripts/python -m pip install -e ".[ml,dev]"   # full: ultralytics/torch/transformers/xgboost, needed for the CLI
+.venv/Scripts/python -m pip install -e ".[ml,dev]"   # full: OpenCV/torch/transformers/xgboost, needed for the CLI
 
 # Run the CLI
 plantvision path/to/plant.jpg
@@ -40,7 +40,7 @@ Tests stub the segmentation and species models, so they don't need the `ml` extr
 lint/format/type-check tooling for PlantVision (no ruff/flake8/mypy config in `pyproject.toml`).
 
 The first CLI run downloads the species classifier (~390 MB) from Hugging Face and caches it; later runs
-are offline. The segmentation model (`models/segmentation/yolo11n-seg.pt`) ships with the repo.
+are offline. Set `LEAF_SEGMENTER_MODEL_PATH` to the privately provisioned segmentation model.
 
 ## Architecture
 
@@ -55,10 +55,7 @@ load_image → SegmentationPredictor.segment → SpeciesPredictor.classify → F
     → NDVIPredictor.predict → build_result → save_outputs
 ```
 
-- **Segmentation** (`segmentation/`): `YoloSegmentationModel` wraps Ultralytics YOLO; only the
-  configured `classes` (COCO class 58 = "potted plant" for the current pretrained checkpoint) are kept
-  and merged into one boolean `combined_mask` via `mask.merge_masks`. `SegmentationPredictor` validates
-  the mask shape against the image and enforces `min_leaf_pixels`, raising `SegmentationError` otherwise.
+- **Segmentation** (`segmentation/`): LeafSegmenter produces one boolean foliage mask. `SegmentationPredictor` checks its shape and enforces the minimum number of leaf pixels.
 - **Species** (`species/`): `HuggingFaceSpeciesModel` classifies either the full image or (by default,
   `crop: mask`) the image cropped to the leaf mask bounding box. Disabled entirely if
   `species.enabled: false` or `species` section is absent from config — `SpeciesPredictor.from_config`
@@ -95,7 +92,7 @@ error (exit 1) — raise the specific subclass rather than a bare exception when
 
 ### Training scripts (`training/`)
 
-`training/segmentation/` holds placeholder scripts for fine-tuning the YOLO segmentation model.
+Use `Backend/inference/train_leaf_segmenter.py` to retrain LeafSegmenter.
 
 `training/ndvi/` is the wired NDVI training pipeline. It runs the *serving* CV path
 (`inference/cv.analyze`) over labeled images, fits a bootstrap ridge ensemble on the color

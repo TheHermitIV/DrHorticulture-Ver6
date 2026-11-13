@@ -1,0 +1,14 @@
+numpy>=1.23
+Pillow>=9.4
+PyYAML>=6.0
+
+[dev]
+pytest>=7.0
+
+[ml]
+ultralytics>=8.3
+torch>=2.0
+transformers>=4.40
+pandas>=2.0
+scikit-learn>=1.2
+xgboost>=2.0

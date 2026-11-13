@@ -45,4 +45,18 @@ extension XCUIApplication {
         Thread.sleep(forTimeInterval: 2)
         coordinate(withNormalizedOffset: CGVector(dx: 0.32, dy: 0.625)).tap()
     }
+
+    /// Taps a tab and waits until it is selected. If the "Save Password?" sheet
+    /// shows up late and swallows the tap, dismisses it and taps again.
+    func openTab(_ title: String) {
+        let tab = tabBars.firstMatch.buttons[title]
+        let selected = NSPredicate(format: "isSelected == true")
+        for _ in 0..<3 {
+            tab.tap()
+            let wait = XCTNSPredicateExpectation(predicate: selected, object: tab)
+            if XCTWaiter.wait(for: [wait], timeout: 3) == .completed { return }
+            dismissSavePasswordSheet()
+        }
+        XCTFail("Couldn't open the \(title) tab")
+    }
 }

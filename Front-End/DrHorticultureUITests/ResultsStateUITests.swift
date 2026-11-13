@@ -7,7 +7,7 @@ final class ResultsStateUITests: XCTestCase {
     private func launchToResults() -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication.launchSignedIn()
-        app.tabBars.firstMatch.buttons["Scan"].tap()
+        app.openTab("Scan")
         app.buttons["capture.sampleButton"].tap()
         app.buttons["preview.acceptButton"].tap()
         XCTAssertTrue(app.staticTexts["results.title"].waitForExistence(timeout: 10))

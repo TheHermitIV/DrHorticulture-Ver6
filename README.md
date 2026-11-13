@@ -7,11 +7,9 @@ The app is a SwiftUI iOS client backed by a Node API and a Python inference serv
 every product rule (quality gate, thresholds, decision). The inference service turns an image into
 raw numbers and never decides, writes, or sees Supabase keys.
 
-> **Status:** the full scan path runs end to end today. The CV stage can run PlantVision's real
-> segmentation/features/species models, while the NDVI model is a stub until the lab data exists.
-> This branch adds the wiring for that model: a shared model-bundle format, an offline training
-> pipeline, and the agent-facing handoff in
-> [`Backend/docs/ML_TRAINING_HANDOFF.md`](Backend/docs/ML_TRAINING_HANDOFF.md).
+> The inference Docker image defaults to LeafSegmenter v1.0.0 with its paired NDVI estimator.
+> The model file ships in `Backend/inference/weights/`. See the
+> [training handoff](Backend/docs/ML_TRAINING_HANDOFF.md) for retraining and evaluation.
 
 ## How a scan flows
 
@@ -21,8 +19,8 @@ iOS photo
   → Tier A quality gate (resolution, exposure, blur)
   → Supabase Storage (private bucket, signed URLs)
   → POST {INFERENCE_URL}/v1/analyze
-       cv.analyze(image)   segmentation + species + color features (PlantVision when CV_ENGINE=plantvision)
-       ml.predict(...)     trained bundle → ndvi, confidence, ensemble spread
+       LeafSegmenter      target foliage mask + color features
+       NDVI estimator     color features → NDVI
   → api decide()          fertilize / do_not_fertilize / abstain
   → scans, scan_images, analyses rows
 ```
@@ -56,7 +54,7 @@ Inside `Backend/`:
 
 - Node 24 and npm
 - Python 3.12
-- For real CV only: the `plantvision[ml]` extras (torch, ultralytics, transformers)
+- For local model development: the `plantvision[ml]` extras (OpenCV, scikit-learn, and the optional species stack)
 - Xcode 15+ for the iOS app
 - A Supabase project for the api (migrations in `Backend/supabase/migrations/`)
 
@@ -100,6 +98,10 @@ python -m venv .venv
 Open `Front-End/DrHorticulture.xcodeproj` in Xcode and run the `DrHorticulture` scheme. CI builds
 and uploads to TestFlight from `main`; local builds do not require the backend to be running when
 the mock analysis service is selected.
+
+For a test build, set `DRHORTICULTURE_API_BASE_URL` in the app target's Xcode build settings
+to the test server's HTTPS origin, or pass `DRHORTICULTURE_API_BASE_URL=https://your-test-server`
+to `xcodebuild`. A blank setting uses production. A malformed override stops the scan before upload.
 
 ## Tests
 
@@ -192,9 +194,12 @@ training writes it, inference loads it. One format, no drift.
 
 ## Deployment
 
+Follow the [Railway deployment runbook](Backend/docs/RAILWAY_DEPLOYMENT.md) to
+deploy the services and verify a scan.
+
 - `api` deploys from `main` to Railway (root directory `/Backend/api`).
 - `inference` deploys as a separate Railway service using `Backend/inference/railway.json` and a
-  Dockerfile built from the repo root (`CV_ENGINE=plantvision`).
+  Dockerfile built from the repo root. It defaults to LeafSegmenter, whose model file ships in the image.
 - The iOS app is built and uploaded to TestFlight by `.github/workflows/ios.yml` on `main`.
 
 ## Further reading

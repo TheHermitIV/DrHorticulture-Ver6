@@ -24,7 +24,7 @@ final class NavigationFlowUITests: XCTestCase {
     func testScanTabOffersASavedPhotoAndTheSample() {
         let app = launch()
 
-        app.tabBars.firstMatch.buttons["Scan"].tap()
+        app.openTab("Scan")
 
         // Queried type-agnostically: SwiftUI decides the element type for a
         // combined accessibility container, and it is not part of the contract.
@@ -48,7 +48,7 @@ final class NavigationFlowUITests: XCTestCase {
     func testWalksScanToResults() {
         let app = launch()
 
-        app.tabBars.firstMatch.buttons["Scan"].tap()
+        app.openTab("Scan")
         app.buttons["capture.sampleButton"].tap()
 
         XCTAssertTrue(app.staticTexts["preview.title"].waitForExistence(timeout: 10))
@@ -61,7 +61,7 @@ final class NavigationFlowUITests: XCTestCase {
     func testRetakeFromPreviewReturnsToCapture() {
         let app = launch()
 
-        app.tabBars.firstMatch.buttons["Scan"].tap()
+        app.openTab("Scan")
         app.buttons["capture.sampleButton"].tap()
         XCTAssertTrue(app.staticTexts["preview.title"].waitForExistence(timeout: 10))
 
@@ -92,20 +92,23 @@ final class NavigationFlowUITests: XCTestCase {
     func testSettingsTabSaysThresholdsLiveInTheBackend() {
         let app = launch()
 
-        app.tabBars.firstMatch.buttons["Settings"].tap()
+        app.openTab("Settings")
 
         let note = app.descendants(matching: .any)
             .matching(identifier: "settings.thresholdNote").firstMatch
         XCTAssertTrue(note.waitForExistence(timeout: 10))
     }
 
-    func testScanTabOffersASpeciesPicker() {
+    func testScanTabDoesNotAskForSpecies() {
         let app = launch()
 
-        app.tabBars.firstMatch.buttons["Scan"].tap()
+        app.openTab("Scan")
 
+        let viewfinder = app.descendants(matching: .any)
+            .matching(identifier: "capture.viewfinder").firstMatch
+        XCTAssertTrue(viewfinder.waitForExistence(timeout: 10))
         let picker = app.descendants(matching: .any)
             .matching(identifier: "capture.speciesPicker").firstMatch
-        XCTAssertTrue(picker.waitForExistence(timeout: 10))
+        XCTAssertFalse(picker.exists)
     }
 }

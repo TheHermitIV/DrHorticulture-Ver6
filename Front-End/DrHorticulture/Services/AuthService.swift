@@ -23,9 +23,12 @@ enum AuthError: Error, Equatable {
 }
 
 struct APIAuthService: AuthService {
-    var baseURL = APIConfig.baseURL
+    var baseURL: URL? = APIConfig.baseURL
 
     func login(username: String, password: String) async throws -> String {
+        guard let baseURL else {
+            throw AuthError.other("The app's server URL is invalid.")
+        }
         var request = URLRequest(
             url: baseURL.appending(path: "api/v1/auth/login"),
             timeoutInterval: 30

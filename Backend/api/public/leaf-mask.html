@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      name="description"
+      content="DrHorticulture Leaf Lab: review plant masks and download training data."
+    />
+    <title>Leaf Lab · DrHorticulture</title>
+    <link rel="stylesheet" href="./horticulture.css" />
+    <script type="module" src="./leaf-mask.js"></script>
+  </head>
+  <body>
+    <header class="top">
+      <a class="brand" href="/test.html"
+        ><span class="logo" aria-hidden="true">◒</span>DrHorticulture</a
+      >
+      <nav aria-label="Workspace">
+        <a href="/test.html">Analyze photo</a><a href="/ImageData.html">Scan details</a
+        ><a href="/leaf-mask.html" aria-current="page">Leaf mask creator</a>
+      </nav>
+    </header>
+    <main>
+      <section id="collect">
+        <div class="intro">
+          <div>
+            <div class="eyebrow">MODEL WORKSPACE / 01</div>
+            <h1>Leaf mask studio<span>.</span></h1>
+            <p>Turn plant photos into reviewed training masks for LeafSegmenter.</p>
+          </div>
+          <div class="actions">
+            <label class="button subtle" id="upload-button"
+              >＋ Add photos<input id="upload" type="file" accept="image/*" multiple /></label
+            ><button id="export" class="primary" disabled>↓ Download dataset</button>
+          </div>
+        </div>
+        <div class="notice-row">
+          <div id="status" class="notice" role="status">
+            Add photos or explore the practice example.
+          </div>
+          <a href="#help">Masking guide ↗</a>
+        </div>
+        <div class="workspace">
+          <aside class="panel queue">
+            <div class="panel-head">
+              <h2>Photo queue</h2>
+              <span class="count" id="count">0</span>
+            </div>
+            <div id="queue"></div>
+            <div class="queue-foot">Training photos and drafts are saved in this browser.</div>
+          </aside>
+          <section class="panel workbench" aria-label="Mask editor">
+            <div class="panel-head">
+              <div>
+                <div class="eyebrow">ANNOTATION WORKBENCH</div>
+                <h2 id="name">Practice photo</h2>
+              </div>
+              <span id="badge" class="badge">Practice</span>
+            </div>
+            <div class="toolbar" aria-label="Editing tools">
+              <button data-tool="paint" aria-pressed="true">Paint</button
+              ><button data-tool="erase" aria-pressed="false">Erase</button>
+              <button data-tool="box" aria-pressed="false">Box</button
+              ><button data-tool="positive" aria-pressed="false">+ Leaf</button>
+              <button data-tool="negative" aria-pressed="false">− Background</button
+              ><button id="undo" disabled>Undo</button><button id="clear" disabled>Clear</button>
+            </div>
+            <div class="settings">
+              <label
+                >Brush <input id="brush" type="range" min="2" max="90" value="18" /><span
+                  id="brush-value"
+                  >18 px</span
+                ></label
+              ><label
+                >Zoom
+                <select id="zoom">
+                  <option value="fit">Fit</option>
+                  <option value=".5">50%</option>
+                  <option value="1">100%</option>
+                  <option value="1.5">150%</option>
+                  <option value="2">200%</option>
+                </select></label
+              ><label><input type="checkbox" id="overlay" checked /> Show mask</label>
+            </div>
+            <div class="boards">
+              <div>
+                <div class="board-label">01 / ORIGINAL</div>
+                <div class="surface">
+                  <canvas id="original" aria-label="Original photo"></canvas>
+                </div>
+              </div>
+              <div>
+                <div class="board-label">02 / EDITABLE MASK</div>
+                <div class="surface">
+                  <canvas id="editor" aria-label="Editable leaf mask"></canvas>
+                </div>
+              </div>
+            </div>
+            <div class="assist">
+              <button id="suggest">Generate suggestion</button
+              ><label><input type="checkbox" id="union" /> Add to mask</label
+              ><button id="clear-prompts">Clear prompts</button
+              ><small id="assistant-name"
+                >Browser color assistant · draw a box or add a leaf point</small
+              >
+            </div>
+          </section>
+          <aside class="panel review">
+            <div class="panel-head">
+              <div>
+                <div class="eyebrow">QUALITY CHECK</div>
+                <h2>Review mask</h2>
+              </div>
+            </div>
+            <div class="review-body">
+              <p>Include the target plant’s visible foliage, even yellow or shaded leaves.</p>
+              <label class="field"
+                >Reviewer<input id="reviewer" maxlength="80" placeholder="Your name"
+              /></label>
+              <label class="field"
+                >Notes <small>Optional</small
+                ><textarea
+                  id="notes"
+                  rows="2"
+                  maxlength="2000"
+                  placeholder="Edges, shadows, or ambiguous leaves"
+                ></textarea>
+              </label>
+              <label class="field"
+                >GreenSeeker NDVI <small>Optional</small
+                ><input
+                  id="ndvi"
+                  type="number"
+                  min="0"
+                  max=".99"
+                  step="any"
+                  placeholder="e.g. 0.54"
+              /></label>
+              <div class="checks">
+                <label><input type="checkbox" id="target" /> Correct plant, no neighbors</label
+                ><label><input type="checkbox" id="foliage" /> Visible foliage is included</label
+                ><label
+                  ><input type="checkbox" id="background" /> Pot, soil, and background
+                  excluded</label
+                >
+              </div>
+              <button id="accept" class="primary">Accept reviewed mask</button
+              ><button id="save" class="subtle">Save draft</button
+              ><button id="mask-download" class="subtle">↓ Download mask PNG</button>
+            </div>
+          </aside>
+        </div>
+      </section>
+      <section id="help" hidden>
+        <div class="intro">
+          <div>
+            <div class="eyebrow">LEAF LAB GUIDE</div>
+            <h1>How to use Leaf Lab<span>.</span></h1>
+            <p>From your first photo to a reviewed training dataset.</p>
+          </div>
+          <a class="button primary" href="#collect">Back to mask studio</a>
+        </div>
+        <div class="guide-grid">
+          <article class="panel guide-card">
+            <div class="eyebrow">01 / ADD PHOTOS</div>
+            <h2>Start with one plant</h2>
+            <p>
+              Choose <strong>Add photos</strong>. You can select several images at once, then pick
+              one from the photo queue.
+            </p>
+            <p>
+              Center one plant, keep the visible leaves in frame, and use even light. The left
+              canvas shows the original and the right canvas is editable. The practice plant lets
+              you try the tools without adding anything to the dataset.
+            </p>
+          </article>
+          <article class="panel guide-card">
+            <div class="eyebrow">02 / EDIT</div>
+            <h2>Paint and refine</h2>
+            <dl>
+              <dt>Paint / Erase</dt>
+              <dd>Drag on the right canvas to add foliage or remove background.</dd>
+              <dt>Brush / Zoom</dt>
+              <dd>
+                Choose a smaller brush for edges and thin fronds. Use Fit to see the whole photo or
+                zoom in for detail.
+              </dd>
+              <dt>Show mask</dt>
+              <dd>Hide or show the green overlay to compare your selection with the photo.</dd>
+              <dt>Undo / Clear</dt>
+              <dd>
+                Undo reverses the last mask edit. Clear empties the mask so you can start over.
+              </dd>
+            </dl>
+          </article>
+          <article class="panel guide-card">
+            <div class="eyebrow">03 / SUGGEST</div>
+            <h2>Get a starting mask</h2>
+            <dl>
+              <dt>Box</dt>
+              <dd>Drag a rectangle around the target foliage on the right canvas.</dd>
+              <dt>+ Leaf / − Background</dt>
+              <dd>
+                Tap representative leaf pixels and unwanted pixels, such as soil or neighboring
+                leaves.
+              </dd>
+              <dt>Generate suggestion</dt>
+              <dd>
+                Use a box or at least one leaf point. The suggestion replaces the current mask
+                unless <strong>Add to mask</strong> is checked. Then refine it with Paint and Erase.
+              </dd>
+              <dt>Clear prompts</dt>
+              <dd>Removes the box and points while keeping the current mask.</dd>
+            </dl>
+            <p>Suggestions use the colors in your photo. Check the mask before accepting it.</p>
+          </article>
+          <article class="panel guide-card">
+            <div class="eyebrow">04 / REVIEW</div>
+            <h2>Check every boundary</h2>
+            <p>
+              Include visible leaves of the target plant, even yellow or shaded ones. Leave out
+              pots, soil, background, and neighboring plants.
+            </p>
+            <p>
+              Enter a reviewer name and confirm all three checks. Notes and a paired
+              <strong>GreenSeeker NDVI</strong> reading (0–0.99) are optional. Leave NDVI blank when
+              you don’t have a reading.
+            </p>
+            <p>
+              <strong>Save draft</strong> keeps unfinished work in this browser.
+              <strong>Accept reviewed mask</strong> marks a completed mask for export. After
+              changing an accepted mask, review and accept it again before exporting.
+            </p>
+          </article>
+          <article class="panel guide-card">
+            <div class="eyebrow">05 / DOWNLOAD</div>
+            <h2>Take your results with you</h2>
+            <p>
+              <strong>Download mask PNG</strong> saves the current black-and-white mask.
+              <strong>Download dataset</strong> exports only accepted entries in a ZIP with the
+              JPEGs, masks, review records, and training manifest.
+            </p>
+            <p>
+              Save or accept edits before switching photos. Downloads are how you move work to
+              another device or share it with the training team. Clearing this browser’s site data
+              removes its saved workspace.
+            </p>
+          </article>
+        </div>
+      </section>
+    </main>
+    <footer>
+      <span>DRHORTICULTURE / LEAF LAB</span><span>Photos and masks stay in this browser.</span>
+    </footer>
+  </body>
+</html>

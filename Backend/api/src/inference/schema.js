@@ -27,6 +27,12 @@ export const analyzeResponseSchema = z.object({
   }),
   checks: z.object({
     angle_ok: z.boolean(),
+    leaf_lighting: z
+      .object({
+        mean_luminance: z.number().min(0).max(255),
+        clipped_pct: z.number().min(0).max(100),
+      })
+      .optional(),
     calibration_card: z.boolean().optional(), // recorded only, not enforced
   }),
 });

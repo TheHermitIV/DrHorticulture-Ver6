@@ -29,7 +29,7 @@
       "properties": {
         "model_version": { "type": "string", "minLength": 1 },
         "segmentation": {
-          "description": "CV stage: YOLO-seg canopy mask, with petals, pot, and soil masked out.",
+          "description": "CV stage: foliage mask for the target plant.",
           "type": "object",
           "required": ["plant_detected", "mask_confidence", "leaf_fraction"],
           "properties": {
@@ -78,6 +78,14 @@
           "required": ["angle_ok"],
           "properties": {
             "angle_ok": { "type": "boolean" },
+            "leaf_lighting": {
+              "type": "object",
+              "required": ["mean_luminance", "clipped_pct"],
+              "properties": {
+                "mean_luminance": { "type": "number", "minimum": 0, "maximum": 255 },
+                "clipped_pct": { "type": "number", "minimum": 0, "maximum": 100 }
+              }
+            },
             "calibration_card": {
               "type": "boolean",
               "description": "Recorded only, not enforced. Optional: no CV function produces it yet."

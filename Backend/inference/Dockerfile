@@ -1,4 +1,5 @@
-# The inference service with PlantVision's CV models (CV_ENGINE=plantvision).
+# LeafSegmenter inference. The default model ships at inference/weights/leaf-segmenter-v1.1.0.json;
+# LEAF_SEGMENTER_MODEL_PATH overrides it.
 # Build context is the repo root, so the image can include Backend/plantvision/:
 #   docker build -f Backend/inference/Dockerfile .
 # On Railway: root directory "/", config file Backend/inference/railway.json.
@@ -8,35 +9,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    HF_HOME=/opt/hf \
-    YOLO_CONFIG_DIR=/tmp/ultralytics \
-    YOLO_OFFLINE=1 \
-    CV_ENGINE=plantvision
-
-# OpenCV (pulled in by ultralytics) needs these shared libraries.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
+    LEAF_SEGMENTER_ENABLED=true
 
 WORKDIR /app
 
-COPY Backend/inference/requirements.txt Backend/inference/requirements-cv.txt inference/
-RUN pip install -r inference/requirements.txt -r inference/requirements-cv.txt
+COPY Backend/inference/requirements.txt inference/
+RUN pip install -r inference/requirements.txt opencv-python-headless==5.0.0.93
 
-# Only what the service needs from PlantVision: the package, its configs, and the YOLO weights.
-# Installed editable so its configs/ and models/ paths resolve from /app/plantvision.
 COPY Backend/plantvision/pyproject.toml Backend/plantvision/README.md plantvision/
 COPY Backend/plantvision/src plantvision/src
-COPY Backend/plantvision/configs plantvision/configs
-COPY Backend/plantvision/models plantvision/models
 RUN pip install --no-deps -e plantvision
 
 COPY Backend/inference/ inference/
 WORKDIR /app/inference
-
-# Load every model once at build time, which downloads the species classifier (~390 MB) into the
-# image, so a cold start never fetches it. After this the service runs offline.
-RUN python -c "import cv"
-ENV HF_HUB_OFFLINE=1
 
 CMD ["sh", "-c", "exec gunicorn -b \"[::]:${PORT:-8000}\" --workers 1 --threads 4 --timeout 120 app:app"]

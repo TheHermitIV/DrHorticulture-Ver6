@@ -1,10 +1,11 @@
+import os
+
 from plantvision import SegmentationError
 from plantvision.input.image_loader import LoadedImage
 from plantvision.segmentation.mask import validate_mask
 from plantvision.segmentation.model import (
     SegmentationModel,
     SegmentationResult,
-    YoloSegmentationModel,
 )
 
 
@@ -27,15 +28,11 @@ class SegmentationPredictor:
 
     @classmethod
     def from_config(cls, config):
+        from plantvision.segmentation.leaf import LeafSegmenter
+
         segmentation = config.section("segmentation")
-        model_path = config.resolve(
-            segmentation.get("model_path", "models/segmentation/yolo11n-seg.pt")
+        model_path = os.environ.get("LEAF_SEGMENTER_MODEL_PATH") or config.resolve(
+            segmentation.get("model_path", "models/segmentation/leaf-segmentor.json")
         )
-        model = YoloSegmentationModel(
-            model_path=model_path,
-            classes=segmentation.get("classes"),
-            confidence=segmentation.get("confidence_threshold", 0.25),
-            device=segmentation.get("device"),
-            imgsz=segmentation.get("image_size", 640),
-        )
+        model = LeafSegmenter(model_path)
         return cls(model, min_leaf_pixels=segmentation.get("min_leaf_pixels", 10))

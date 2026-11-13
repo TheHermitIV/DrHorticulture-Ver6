@@ -1,16 +1,19 @@
 import Foundation
 
 /// Talks to the live backend: `POST /api/v1/scans` as multipart with a
-/// `species` field and one JPEG in `image`.
+/// optional `species` field and one JPEG in `image`.
 struct APIAnalysisService: AnalysisService {
-    var baseURL = APIConfig.baseURL
+    var baseURL: URL? = APIConfig.baseURL
 
     func analyze(imageData: Data, species: String) async throws -> Scan {
+        guard let baseURL else {
+            throw AnalysisError.transport("The app's server URL is invalid.")
+        }
         let boundary = "Boundary-\(UUID().uuidString)"
 
         var request = URLRequest(
             url: baseURL.appending(path: "api/v1/scans"),
-            timeoutInterval: 60
+            timeoutInterval: 150
         )
         request.httpMethod = "POST"
         request.setValue(
@@ -55,12 +58,15 @@ struct APIAnalysisService: AnalysisService {
         }
     }
 
-    /// `species` first, then the photo bytes unchanged.
+    /// Include the species hint when supplied, followed by the photo bytes.
     private static func multipartBody(imageData: Data, species: String, boundary: String) -> Data {
         var body = Data()
-        body.append(Data("--\(boundary)\r\n".utf8))
-        body.append(Data("Content-Disposition: form-data; name=\"species\"\r\n\r\n".utf8))
-        body.append(Data("\(species)\r\n".utf8))
+        let species = species.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !species.isEmpty {
+            body.append(Data("--\(boundary)\r\n".utf8))
+            body.append(Data("Content-Disposition: form-data; name=\"species\"\r\n\r\n".utf8))
+            body.append(Data("\(species)\r\n".utf8))
+        }
         body.append(Data("--\(boundary)\r\n".utf8))
         body.append(
             Data("Content-Disposition: form-data; name=\"image\"; filename=\"photo.jpg\"\r\n".utf8)

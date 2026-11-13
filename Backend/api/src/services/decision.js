@@ -12,9 +12,13 @@
 const reject = (reason) => ({ status: 'rejected', recommendation: null, reason });
 const abstain = (reason) => ({ status: 'abstained', recommendation: 'abstain', reason });
 
-export function decide({ segmentation: s, estimate: e, checks: c }, cfg) {
+export function decide({ segmentation: s, estimate: e, checks: c }, cfg, imageMetrics) {
   if (!s.plant_detected) return reject('no_plant_detected');
   if (!c.angle_ok) return reject('bad_angle');
+  if (cfg.quality.lighting_scope === 'leaf') {
+    const reason = lightingRejection(c.leaf_lighting ?? imageMetrics, cfg.quality);
+    if (reason) return reject(reason);
+  }
   if (s.mask_confidence < cfg.mask_min) return abstain('low_mask_confidence');
   if (e.confidence < cfg.confidence_min) return abstain('low_confidence');
   return {
@@ -23,3 +27,4 @@ export function decide({ segmentation: s, estimate: e, checks: c }, cfg) {
     reason: null,
   };
 }
+import { lightingRejection } from './qualityGate.js';

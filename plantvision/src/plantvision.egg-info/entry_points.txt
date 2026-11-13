@@ -1,0 +1,2 @@
+[console_scripts]
+plantvision = plantvision.cli.commands:main

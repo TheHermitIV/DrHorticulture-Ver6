@@ -26,7 +26,7 @@ final class LoginUITests: XCTestCase {
     func testSigningOutReturnsToTheLoginScreen() {
         let app = XCUIApplication.launchSignedIn()
 
-        app.tabBars.firstMatch.buttons["Settings"].tap()
+        app.openTab("Settings")
         let username = app.descendants(matching: .any)
             .matching(identifier: "settings.username").firstMatch
         XCTAssertTrue(username.waitForExistence(timeout: 10))
@@ -39,7 +39,7 @@ final class LoginUITests: XCTestCase {
     func testSettingsOffersALightAndDarkTheme() {
         let app = XCUIApplication.launchSignedIn()
 
-        app.tabBars.firstMatch.buttons["Settings"].tap()
+        app.openTab("Settings")
         let picker = app.segmentedControls["settings.themePicker"]
         XCTAssertTrue(picker.waitForExistence(timeout: 10))
         XCTAssertTrue(picker.buttons["System"].exists)

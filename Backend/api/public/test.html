@@ -3,109 +3,60 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>DrHorticulture scan test</title>
-    <style>
-      body {
-        font-family: system-ui, sans-serif;
-        max-width: 720px;
-        margin: 2rem auto;
-        padding: 0 1rem;
-      }
-      form {
-        display: grid;
-        gap: 0.75rem;
-      }
-      label {
-        display: grid;
-        gap: 0.25rem;
-      }
-      button {
-        justify-self: start;
-        padding: 0.5rem 1.25rem;
-      }
-      pre {
-        background: #f4f4f4;
-        padding: 1rem;
-        overflow-x: auto;
-        white-space: pre-wrap;
-        word-break: break-all;
-      }
-    </style>
+    <title>Analyze photo | DrHorticulture</title>
+    <link rel="stylesheet" href="/horticulture.css" />
+    <script type="module" src="/scan.js"></script>
   </head>
   <body>
-    <h1>Scan test</h1>
-    <p>
-      Dev only: posts to <code>POST /api/v1/scans</code>, or to
-      <code>POST /api/v1/scans/{id}/images</code> when a scan id is given, and shows the raw
-      response.
-    </p>
-
-    <form id="scan-form">
-      <label>
-        Photo (JPEG or PNG)
-        <input type="file" name="image" accept="image/jpeg,image/png" required />
-      </label>
-      <label>
-        Species (optional)
-        <input type="text" name="species" maxlength="64" placeholder="geranium" />
-      </label>
-      <label>
-        Retake: add to scan id (optional; the scan keeps its species)
-        <input type="text" name="scan_id" placeholder="a rejected, abstained, or failed scan" />
-      </label>
-      <label>
-        Mock scenario (sent as <code>x-mock-scenario</code>; mock mode only)
-        <select name="scenario">
-          <option value="">None: the contract example, a recommendation</option>
-          <option value="low_confidence">low_confidence: abstained</option>
-          <option value="no_plant">no_plant: rejected (422)</option>
-          <option value="error">error: failed (503)</option>
-        </select>
-      </label>
-      <button type="submit">Send</button>
-    </form>
-
-    <p id="status"></p>
-    <pre id="output"></pre>
-
-    <script>
-      const form = document.getElementById('scan-form');
-      const status = document.getElementById('status');
-      const output = document.getElementById('output');
-
-      form.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const button = form.querySelector('button');
-        button.disabled = true;
-        status.textContent = 'Uploading…';
-        output.textContent = '';
-        const started = performance.now();
-        try {
-          const body = new FormData(form);
-          const scenario = body.get('scenario');
-          const scanId = body.get('scan_id').trim();
-          body.delete('scenario');
-          body.delete('scan_id');
-          if (scanId) body.delete('species');
-          const headers = scenario ? { 'x-mock-scenario': scenario } : {};
-          const url = scanId
-            ? `/api/v1/scans/${encodeURIComponent(scanId)}/images`
-            : '/api/v1/scans';
-          const res = await fetch(url, { method: 'POST', body, headers });
-          const seconds = ((performance.now() - started) / 1000).toFixed(2);
-          status.textContent = `HTTP ${res.status} in ${seconds} s · request id ${res.headers.get('x-request-id')}`;
-          const text = await res.text();
-          try {
-            output.textContent = JSON.stringify(JSON.parse(text), null, 2);
-          } catch {
-            output.textContent = text;
-          }
-        } catch (err) {
-          status.textContent = `Request failed: ${err.message}`;
-        } finally {
-          button.disabled = false;
-        }
-      });
-    </script>
+    <header class="top">
+      <a class="brand" href="/test.html"
+        ><span class="logo" aria-hidden="true">◒</span>DrHorticulture</a
+      >
+      <nav aria-label="Workspace">
+        <a href="/test.html" aria-current="page">Analyze photo</a
+        ><a href="/ImageData.html">Scan details</a><a href="/leaf-mask.html">Leaf mask creator</a>
+      </nav>
+    </header>
+    <main class="scan-page">
+      <div class="intro">
+        <div>
+          <h1>Analyze a plant photo<span>.</span></h1>
+          <p>Get an estimated NDVI reading from a photo of one plant.</p>
+        </div>
+      </div>
+      <div class="scan-layout">
+        <section class="panel scan-panel" aria-labelledby="photo-title">
+          <h2 id="photo-title">Choose a photo</h2>
+          <p>
+            Center one plant, keep its leaves in frame, and use even light. Keep neighboring plants
+            out of the photo.
+          </p>
+          <form id="scan-form">
+            <label class="field"
+              >Plant photo <span class="file-format">JPEG or PNG</span>
+              <input type="file" name="image" accept="image/jpeg,image/png" />
+            </label>
+            <p id="selected-file"></p>
+            <img id="preview" alt="Selected plant photo" hidden />
+            <p id="retake-note" hidden></p>
+            <div class="actions">
+              <button id="submit" class="primary" type="submit">Analyze photo</button>
+              <button id="new-scan" class="subtle" type="button" hidden>Start a new scan</button>
+            </div>
+          </form>
+        </section>
+        <section class="panel scan-panel" aria-labelledby="result-title">
+          <h2 id="result-title">Scan result</h2>
+          <p id="status" role="status" aria-live="polite">Choose a photo to begin.</p>
+          <div id="scan-result" hidden>
+            <p class="reading-label">Estimated NDVI</p>
+            <output id="ndvi" class="reading"></output>
+            <p id="advice"></p>
+          </div>
+          <ul id="hints" hidden></ul>
+          <a id="details-link" class="detail-link" hidden>View scan details</a>
+        </section>
+      </div>
+    </main>
   </body>
 </html>

@@ -13,6 +13,7 @@ const configSchema = z.object({
   confidence_min: threshold,
   mask_min: threshold,
   quality: z.object({
+    lighting_scope: z.enum(['image', 'leaf']).optional(),
     min_short_side_px: threshold,
     luminance_min: threshold,
     luminance_max: threshold,
