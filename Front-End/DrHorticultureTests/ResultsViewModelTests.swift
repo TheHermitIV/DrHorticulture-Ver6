@@ -38,7 +38,9 @@ struct ResultsViewModelTests {
         await viewModel.load(imageData: image, species: "basil")
 
         #expect(viewModel.phase ==
-            .loaded(.abstention(reason: "The reading wasn't confident enough to make a call.")))
+            .loaded(.estimateWithoutRecommendation(
+                ndvi: 0.33, reason: "The reading wasn't confident enough to make a call."
+            )))
     }
 
     /// A rejected photo is a retake prompt with hints, not a dead end.
@@ -87,8 +89,8 @@ struct ResultsViewModelTests {
     @Test func reloadsAfterServiceIsSwapped() async {
         let viewModel = ResultsViewModel(service: MockAnalysisService(scenario: .abstain))
         await viewModel.load(imageData: image, species: "basil")
-        guard case .loaded(.abstention) = viewModel.phase else {
-            Issue.record("Expected abstention first")
+        guard case .loaded(.estimateWithoutRecommendation) = viewModel.phase else {
+            Issue.record("Expected an estimate without fertilizer advice first")
             return
         }
 

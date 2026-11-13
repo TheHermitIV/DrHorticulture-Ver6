@@ -34,10 +34,9 @@ struct MockAnalysisServiceTests {
 
         #expect(scan.scanStatus == .abstained)
         #expect(scan.result?.abstainReason == "low_confidence")
-        guard case .abstention = ResultsState(scan: scan) else {
-            Issue.record("Expected an abstention state")
-            return
-        }
+        #expect(ResultsState(scan: scan) == .estimateWithoutRecommendation(
+            ndvi: 0.33, reason: "The reading wasn't confident enough to make a call."
+        ))
     }
 
     @Test func rejectedScenarioThrowsWithRetakeHints() async throws {

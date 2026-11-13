@@ -5,7 +5,7 @@ function the Flask service calls, rather than re-implementing segmentation and f
 the CV stage changes, both training and serving change together.
 
 This module is intentionally lazy about heavy imports. `--dry-run` and unit tests never import
-torch/ultralytics; only `extract()` does, and only when actually run.
+the model stack; only `extract()` does, and only when actually run.
 """
 
 from __future__ import annotations

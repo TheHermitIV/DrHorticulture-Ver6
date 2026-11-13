@@ -22,7 +22,11 @@ struct CaptureView: View {
                         Image(systemName: "camera.viewfinder")
                             .font(.system(size: 52))
                             .foregroundStyle(.secondary)
-                        Text("Photograph a whole potted plant")
+                        Text("Center one plant and keep all its leaves in frame.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                        Text("Use even lighting, hold steady, and keep nearby plants out of the shot.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
@@ -34,14 +38,6 @@ struct CaptureView: View {
                 // plain shape isn't an accessibility element on its own.
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("capture.viewfinder")
-
-            Picker("Species", selection: Bindable(session).species) {
-                ForEach(PlantSpecies.options, id: \.self) { name in
-                    Text(name.capitalized).tag(name)
-                }
-            }
-            .pickerStyle(.menu)
-            .accessibilityIdentifier("capture.speciesPicker")
 
             if loadFailed {
                 Text("That photo couldn't be loaded. Try another one.")

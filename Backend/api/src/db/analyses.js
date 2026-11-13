@@ -2,7 +2,7 @@ import { latestBy, unwrap } from './result.js';
 
 // What the scan object's result needs; raw_response stays in the table.
 const RESULT_COLUMNS =
-  'id, image_id, model_version, config_version, ndvi, confidence, recommendation, abstain_reason, created_at';
+  'id, image_id, model_version, config_version, ndvi, confidence, recommendation, abstain_reason, mask_confidence, leaf_fraction, latency_ms, created_at';
 
 export function analysesQueries(supabase) {
   return {

@@ -39,7 +39,7 @@ export function createApp({ env, logger, db, storage, inference = createInferenc
     }),
   );
 
-  // public/test.html: a one-button upload page for local testing, never served in production.
+  // The local scan preview and mask editor are served only outside production.
   if (env.NODE_ENV !== 'production') {
     app.use(express.static(PUBLIC_DIR));
   }

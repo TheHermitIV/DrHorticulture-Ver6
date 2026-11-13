@@ -20,8 +20,11 @@ Backend/supabase/.temp/
 Backend/supabase/.branches/
 
 # Trained model bundles are derived artifacts; distribute them via the model-weights bucket.
+# Exception: the LeafSegmenter model ships in the repo so the inference image includes it.
 Backend/inference/weights/*
 !Backend/inference/weights/.gitkeep
+!Backend/inference/weights/leaf-segmenter-v1.0.0.json
+!Backend/inference/weights/leaf-segmenter-v1.1.0.json
 
 # OS
 .DS_Store

@@ -97,11 +97,11 @@ def test_species_probs_are_the_full_distribution_in_label_order(pv_cv):
     assert embedder.CLASSIFIER.seen.shape == (20, 30, 3)
 
 
-def test_the_segmenter_gets_bgr_as_ultralytics_expects(pv_cv, segmenter):
+def test_the_segmenter_gets_rgb(pv_cv, segmenter):
     image = leafy_image()
     image[..., 0] = 200  # red
     pv_cv.analyze(image)
-    assert segmenter.seen[0, 0].tolist() == [0, 160, 200]
+    assert segmenter.seen[0, 0].tolist() == [200, 160, 0]
 
 
 def test_no_plant_is_a_full_answer(pv_cv, segmenter):
@@ -131,7 +131,7 @@ def test_the_app_reports_plantvision_species(pv_cv):
 
 
 def test_an_unknown_engine_fails_at_import(monkeypatch):
-    monkeypatch.setenv("CV_ENGINE", "yolo")
+    monkeypatch.setenv("CV_ENGINE", "unknown")
     with pytest.raises(RuntimeError, match="CV_ENGINE"):
         importlib.reload(importlib.import_module("cv.engine"))
     monkeypatch.undo()

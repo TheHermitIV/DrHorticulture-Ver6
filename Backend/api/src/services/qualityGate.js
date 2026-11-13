@@ -52,6 +52,13 @@ export const TIER_A_CHECKS = Object.freeze([
 const fails = ({ metric, below, above }, metrics, thresholds) =>
   below ? metrics[metric] < thresholds[below] : metrics[metric] > thresholds[above];
 
+const isLightingCheck = ({ metric }) => metric === 'mean_luminance' || metric === 'clipped_pct';
+
+export function lightingRejection(metrics, thresholds) {
+  return TIER_A_CHECKS.find((check) => isLightingCheck(check) && fails(check, metrics, thresholds))
+    ?.reason;
+}
+
 const round2 = (value) => Math.round(value * 100) / 100;
 
 function meanAndVariance(pixels) {
@@ -112,7 +119,11 @@ export async function measureQuality(buffer) {
 
 // Applies decision_config.quality to measured metrics.
 export function judgeQuality(metrics, thresholds) {
-  const failed = TIER_A_CHECKS.filter((check) => fails(check, metrics, thresholds));
+  const failed = TIER_A_CHECKS.filter(
+    (check) =>
+      !(thresholds.lighting_scope === 'leaf' && isLightingCheck(check)) &&
+      fails(check, metrics, thresholds),
+  );
   const reasons = failed.map((check) => check.reason);
   return {
     passed: reasons.length === 0,

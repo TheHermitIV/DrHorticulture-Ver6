@@ -46,15 +46,20 @@ struct ResultsView: View {
                 ReadingCard(ndvi: ndvi, confidence: confidence)
             case .reading(let ndvi, let confidence):
                 ReadingCard(ndvi: ndvi, confidence: confidence)
+            case .estimateWithoutRecommendation(let ndvi, let reason):
+                ReadingCard(ndvi: ndvi)
+                AbstentionCard(
+                    reason: reason, title: "No fertilizer recommendation", onRetake: retake
+                )
             case .abstention(let reason, let hints):
                 AbstentionCard(reason: reason, hints: hints, onRetake: retake)
             }
 
         case .failed(let message):
-            AbstentionCard(reason: message, hints: [], onRetake: retake)
+            AbstentionCard(reason: message, title: "Analysis failed", onRetake: retake)
 
         case .loading:
-            ProgressView()
+            ProgressView("Analyzing your photo…")
                 .accessibilityIdentifier("results.loading")
         }
     }
@@ -106,21 +111,23 @@ struct RecommendationCard: View {
 
 struct ReadingCard: View {
     let ndvi: Double
-    let confidence: Double
+    var confidence: Double? = nil
 
     var body: some View {
         VStack(spacing: 12) {
-            LabeledContent("NDVI") {
+            LabeledContent("Estimated NDVI") {
                 Text(ndvi.formatted(.number.precision(.fractionLength(3))))
                     .monospacedDigit()
             }
             .accessibilityIdentifier("results.ndvi")
 
-            LabeledContent("Confidence") {
-                Text(confidence.formatted(.percent.precision(.fractionLength(0))))
-                    .monospacedDigit()
+            if let confidence {
+                LabeledContent("Confidence") {
+                    Text(confidence.formatted(.percent.precision(.fractionLength(0))))
+                        .monospacedDigit()
+                }
+                .accessibilityIdentifier("results.confidence")
             }
-            .accessibilityIdentifier("results.confidence")
         }
         .padding(24)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 16))
@@ -130,6 +137,7 @@ struct ReadingCard: View {
 struct AbstentionCard: View {
     let reason: String
     var hints: [String] = []
+    var title: String = "Couldn't get a reliable reading, try again."
     let onRetake: () -> Void
 
     var body: some View {
@@ -139,7 +147,7 @@ struct AbstentionCard: View {
                 .foregroundStyle(.yellow)
                 .accessibilityHidden(true)
 
-            Text("Couldn't get a reliable reading, try again.")
+            Text(title)
                 .font(.headline)
                 .multilineTextAlignment(.center)
                 .accessibilityIdentifier("results.abstention")

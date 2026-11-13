@@ -37,6 +37,48 @@ const metrics = {
 const mockBody = { ...mockExample(), model_version: 'mock-0.1' };
 
 describe('POST /api/v1/scans', () => {
+  it.each([
+    ['dark', { tone: [0.35, 0] }],
+    ['bright', { glare: 0.5 }],
+  ])('uses leaf lighting for a 521 px photo with a %s background', async (lighting, appearance) => {
+    const config = {
+      ...SEED_CONFIG,
+      quality: { ...SEED_CONFIG.quality, lighting_scope: 'leaf', min_short_side_px: 512 },
+    };
+    const body = mockExample();
+    body.checks.leaf_lighting = { mean_luminance: 98.23, clipped_pct: 0.2 };
+    const { app } = setup({ db: fakeDb({ config }), inference: answering(body) });
+    const image = await makePhoto({ width: 521, height: 600, ...appearance });
+    const res = await postScan(app).attach('image', image, 'demo.jpg');
+    expect(res.status).toBe(201);
+    expect(res.body.image.quality.metrics).toMatchObject({
+      short_side_px: 521,
+      leaf_mean_luminance: 98.23,
+      leaf_clipped_pct: 0.2,
+    });
+    if (lighting === 'dark') expect(res.body.image.quality.metrics.mean_luminance).toBeLessThan(60);
+    else expect(res.body.image.quality.metrics.clipped_pct).toBeGreaterThan(5);
+  });
+
+  it.each([true, false])(
+    'rejects bad lighting with leaf metrics present = %s',
+    async (hasMetrics) => {
+      const config = {
+        ...SEED_CONFIG,
+        quality: { ...SEED_CONFIG.quality, lighting_scope: 'leaf', blur_min: 0 },
+      };
+      const body = mockExample();
+      if (hasMetrics) body.checks.leaf_lighting = { mean_luminance: 30, clipped_pct: 0 };
+      const { app, db } = setup({ db: fakeDb({ config }), inference: answering(body) });
+      const image = await makePhoto(hasMetrics ? {} : { tone: [0.35, 0] });
+      const res = await postScan(app).attach('image', image, 'demo.jpg');
+      expect(res.status).toBe(422);
+      expect(res.body.error.details.reasons).toEqual(['too_dark']);
+      expect(db.tables.scan_images[0].quality_passed).toBe(false);
+      expect(db.tables.analyses).toHaveLength(1);
+    },
+  );
+
   it('stores the photo, runs inference, and returns 201 with the recommendation', async () => {
     const { app, db, storage } = setup();
     const photo = await makePhoto({ orientation: 6, exif: PHONE_EXIF });
@@ -57,13 +99,27 @@ describe('POST /api/v1/scans', () => {
       image: {
         id: image.id,
         url: `https://storage.test/${path}?purpose=client`,
-        quality: { passed: true, metrics: { ...metrics, short_side_px: 1024 } },
+        width: 1280,
+        height: 1024,
+        mime_type: 'image/jpeg',
+        quality: {
+          passed: true,
+          metrics: { ...metrics, short_side_px: 1024 },
+          rejection_reasons: [],
+        },
       },
       result: {
         recommendation: 'do_not_fertilize',
         ndvi: 0.62,
         confidence: 0.78,
         abstain_reason: null,
+        model_version: 'mock-0.1',
+        config_version: 1,
+      },
+      diagnostics: {
+        mask_confidence: 0.91,
+        leaf_fraction: 0.42,
+        latency_ms: expect.any(Number),
         model_version: 'mock-0.1',
         config_version: 1,
       },
