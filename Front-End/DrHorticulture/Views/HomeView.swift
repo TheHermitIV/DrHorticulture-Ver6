@@ -10,7 +10,7 @@ struct HomeView: View {
             VStack(spacing: 8) {
                 Image(systemName: "leaf.fill")
                     .font(.system(size: 52))
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Color.brand)
                     .accessibilityHidden(true)
 
                 Text("Dr. Horticulture")
@@ -29,7 +29,7 @@ struct HomeView: View {
                     .font(.headline)
 
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(.quaternary)
+                    .fill(Color.brand.opacity(0.12))
                     .frame(height: 140)
                     .overlay {
                         Text("No scans yet")
@@ -50,6 +50,7 @@ struct HomeView: View {
             .accessibilityIdentifier("home.startButton")
         }
         .padding(24)
+        .brandBackground()
         .navigationTitle("Home")
         .navigationBarTitleDisplayMode(.inline)
     }

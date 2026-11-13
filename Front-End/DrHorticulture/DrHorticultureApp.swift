@@ -2,10 +2,14 @@ import SwiftUI
 
 @main
 struct DrHorticultureApp: App {
+    @AppStorage(AppTheme.storageKey) private var theme: AppTheme = .system
+
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environment(\.analysisService, APIAnalysisService())
+                .preferredColorScheme(theme.colorScheme)
+                .tint(.brand)
         }
     }
 }
