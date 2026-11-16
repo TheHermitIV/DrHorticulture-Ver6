@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createStorage, objectPath } from '../src/services/storage.js';
+import { createStorage, maskPath, objectPath } from '../src/services/storage.js';
 
 // Records calls to supabase.storage.from(bucket).<method>(...) and returns canned results.
 function fakeSupabase(results = {}) {
@@ -28,7 +28,28 @@ describe('objectPath', () => {
   });
 });
 
+describe('maskPath', () => {
+  it('pairs the mask with its photo by image id: scans/{scan_id}/{image_id}.mask.png', () => {
+    expect(maskPath({ scanId: 'a', imageId: 'b' })).toBe('scans/a/b.mask.png');
+  });
+});
+
 describe('createStorage', () => {
+  it('uploads a leaf mask as a PNG beside its photo without overwriting', async () => {
+    const supabase = fakeSupabase();
+    const storage = createStorage({ supabase, bucket: 'scan-images' });
+    const png = Buffer.from('png-bytes');
+    const path = await storage.uploadMask({ ...ids, png });
+    expect(path).toBe('scans/scan-1/image-1.mask.png');
+    expect(supabase.calls).toEqual([
+      {
+        bucket: 'scan-images',
+        method: 'upload',
+        args: [path, png, { contentType: 'image/png', upsert: false }],
+      },
+    ]);
+  });
+
   it('uploads the original bytes to the bucket without overwriting', async () => {
     const supabase = fakeSupabase();
     const storage = createStorage({ supabase, bucket: 'scan-images' });

@@ -35,7 +35,15 @@
           "properties": {
             "plant_detected": { "type": "boolean" },
             "mask_confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-            "leaf_fraction": { "type": "number", "minimum": 0, "maximum": 1 }
+            "leaf_fraction": { "type": "number", "minimum": 0, "maximum": 1 },
+            "mask_png": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000000,
+              "contentEncoding": "base64",
+              "contentMediaType": "image/png",
+              "description": "Optional. The foliage mask the numbers were computed on, as a base64 PNG: white is leaf, black is background. Its size may differ from the photo's (the model works on a resized copy) but its aspect ratio matches the photo after EXIF orientation. The api stores it beside the photo and never keeps it in analyses.raw_response. Left out when no plant was found; the stubs and the example leave it out."
+            }
           }
         },
         "species": {

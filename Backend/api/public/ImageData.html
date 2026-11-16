@@ -34,7 +34,31 @@
         </form>
         <p id="status" role="status" aria-live="polite"></p>
         <div id="scan-details" class="scan-layout" hidden>
-          <img id="stored-image" alt="Stored plant photo" hidden />
+          <div class="pair">
+            <figure id="plant-figure" hidden>
+              <div class="photo-stack">
+                <img id="stored-image" alt="Stored plant photo" />
+                <img id="mask-overlay" class="mask-overlay" alt="" hidden />
+              </div>
+              <figcaption id="plant-caption">Plant</figcaption>
+            </figure>
+            <label id="overlay-toggle" class="overlay-toggle" hidden
+              ><input id="show-overlay" type="checkbox" checked /> Darken everything outside the
+              mask</label
+            >
+            <figure id="mask-figure" hidden>
+              <img
+                id="mask-image"
+                class="mask-image"
+                alt="Leaf mask: white is the area the model analyzed"
+              />
+              <figcaption id="mask-caption">Mask</figcaption>
+            </figure>
+            <p id="mask-missing" hidden>
+              No leaf mask was stored for this photo. Masks are saved for photos the model analyzed
+              and found leaves in.
+            </p>
+          </div>
           <div>
             <dl id="facts" class="facts"></dl>
             <section id="decision-details" hidden>

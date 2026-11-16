@@ -5,8 +5,10 @@ import { REJECTIONS } from './qualityGate.js';
 const WITH_RESULT = new Set(['completed', 'abstained']);
 
 // The scan object returned by every scan endpoint (see the spec's API specification). image is
-// the scan's latest image and analysis that image's latest analysis.
-export function toScanObject({ scan, image, imageUrl, analysis = null }) {
+// the scan's latest image and analysis that image's latest analysis. pair_number numbers the
+// scan's photos (1, then 2+ for retakes); the photo and its leaf mask share it, shown as
+// "Plant N" and "Mask N". maskUrl is null when no mask was stored for the photo.
+export function toScanObject({ scan, image, imageUrl, maskUrl = null, analysis = null }) {
   return {
     scan_id: scan.id,
     species: scan.species,
@@ -14,7 +16,9 @@ export function toScanObject({ scan, image, imageUrl, analysis = null }) {
     image: image
       ? {
           id: image.id,
+          pair_number: image.pair_number ?? null,
           url: imageUrl,
+          mask_url: maskUrl,
           width: image.width,
           height: image.height,
           mime_type: image.mime_type,

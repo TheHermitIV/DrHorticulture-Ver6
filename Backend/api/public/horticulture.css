@@ -492,6 +492,44 @@ footer {
 .scan-panel .actions {
   margin-top: 16px;
 }
+.pair figure {
+  margin: 14px 0;
+}
+.pair figcaption {
+  margin-top: 6px;
+  font-weight: 650;
+}
+.photo-stack {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+}
+.scan-panel .photo-stack img {
+  margin: 0;
+}
+/* The mask over its photo: multiply keeps white (leaf) pixels and darkens black (background)
+   ones. The mask may be smaller than the photo, but its aspect ratio matches, so it is stretched
+   to cover it. */
+.scan-panel .photo-stack .mask-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  mix-blend-mode: multiply;
+  opacity: 0.7;
+  pointer-events: none;
+}
+.scan-panel .mask-image {
+  margin: 0;
+  max-height: 260px;
+  border: 1px solid var(--line);
+}
+.overlay-toggle {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
 .scan-panel .reading-label {
   margin-bottom: 0;
   font-weight: 650;

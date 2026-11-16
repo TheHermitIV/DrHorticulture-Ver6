@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { AppError } from '../errors.js';
 import { isUuid } from './ids.js';
 import { toScanObject } from './scanObject.js';
+import { maskPath } from './storage.js';
 
 // created_at as Postgres returns it, such as 2026-10-01T15:04:05.123456+00:00.
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/;
@@ -52,10 +53,12 @@ export function createScanReader({ db, storage }) {
     if (scans.length === 0) return [];
     const images = await db.scanImages.latestByScan(scans.map((scan) => scan.id));
     const latestImages = [...images.values()];
+    // Each photo's mask is found by its paired name; one that was never stored signs as null.
+    const pairedMask = (image) => maskPath({ scanId: image.scan_id, imageId: image.id });
     const [analyses, urls] = await Promise.all([
       db.analyses.latestByImage(latestImages.map((image) => image.id)),
       storage.signedUrls(
-        latestImages.map((image) => image.storage_path),
+        latestImages.flatMap((image) => [image.storage_path, pairedMask(image)]),
         'client',
       ),
     ]);
@@ -65,6 +68,7 @@ export function createScanReader({ db, storage }) {
         scan,
         image,
         imageUrl: image ? (urls.get(image.storage_path) ?? null) : null,
+        maskUrl: image ? (urls.get(pairedMask(image)) ?? null) : null,
         analysis: image ? (analyses.get(image.id) ?? null) : null,
       });
     });

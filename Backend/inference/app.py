@@ -4,10 +4,12 @@ Turns an image URL into raw numbers through LeafSegmenter and its NDVI estimator
 Models load at startup. The API owns recommendations and database writes.
 """
 
+import base64
 import hmac
 import io
 import logging
 import os
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -108,6 +110,41 @@ def parse_request(body):
     return image_url, image_id, hint
 
 
+def encode_mask(mask):
+    """A boolean H x W leaf mask as a base64 1-bit PNG: white is leaf, black is background."""
+    buffer = io.BytesIO()
+    Image.fromarray(np.asarray(mask, dtype=bool)).save(buffer, format="PNG", optimize=True)
+    return base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
+def with_mask(model):
+    """model.analyze, plus segmentation.mask_png when a plant was found: the mask its numbers
+    were computed on.
+
+    LeafSegmenter.analyze() builds that mask through self.mask() but does not return it, and
+    plantvision/ belongs to the ML team. Computing it again would double the time per scan, so
+    model.mask is wrapped to keep the mask of the current request, per thread since gunicorn
+    serves several at once. If analyze() ever stops calling self.mask(), mask_png is left out.
+    """
+    recorded = threading.local()
+    compute_mask = model.mask
+
+    def recording_mask(image):
+        recorded.mask = compute_mask(image)
+        return recorded.mask
+
+    model.mask = recording_mask
+
+    def analyze_with_mask(image):
+        recorded.mask = None
+        body = model.analyze(image)
+        if body["segmentation"]["plant_detected"] and recorded.mask is not None:
+            body["segmentation"]["mask_png"] = encode_mask(recorded.mask)
+        return body
+
+    return analyze_with_mask
+
+
 def num(value):
     """A plain JSON number. float32 values such as 0.83 would otherwise print as 0.8299999833."""
     return round(float(value), 6)
@@ -155,7 +192,7 @@ def create_app(api_key=None, model_version=None, fetch_image=download_image):
             Path(__file__).with_name("weights") / "leaf-segmenter-v1.1.0.json"
         )
         model = LeafSegmenter(weights_path)
-        analyze_image = model.analyze
+        analyze_image = with_mask(model)
         model_version = model.model_version
     else:
         model_version = model_version or os.environ.get("MODEL_VERSION") or DEFAULT_MODEL_VERSION

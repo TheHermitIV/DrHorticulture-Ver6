@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import pino from 'pino';
 
 import { loadEnv } from '../src/config/env.js';
-import { objectPath } from '../src/services/storage.js';
+import { maskPath, objectPath } from '../src/services/storage.js';
 
 export const silentLogger = pino({ level: 'silent' });
 
@@ -107,11 +107,20 @@ export function fakeDb({ failOn, config = SEED_CONFIG } = {}) {
     scanImages: {
       async insert(row) {
         maybeFail('scanImages.insert');
+        // Like the trigger in migration 0005: the next number in the scan.
+        const pairNumber =
+          Math.max(
+            0,
+            ...tables.scan_images
+              .filter((image) => image.scan_id === row.scan_id)
+              .map((image) => image.pair_number),
+          ) + 1;
         const saved = {
           quality_passed: null,
           quality_metrics: {},
           rejection_reasons: [],
           created_at: now(),
+          pair_number: pairNumber,
           ...row,
         };
         tables.scan_images.push(saved);
@@ -157,23 +166,33 @@ export function fakeDb({ failOn, config = SEED_CONFIG } = {}) {
   };
 }
 
-// In-memory stand-in for src/services/storage.js.
-export function fakeStorage() {
+// In-memory stand-in for src/services/storage.js. failOn: 'uploadMask' to fail mask uploads.
+export function fakeStorage({ failOn } = {}) {
   const objects = new Map();
+  const put = (path, bytes) => {
+    if (objects.has(path)) throw new Error('Storage upload failed: The resource already exists');
+    objects.set(path, Buffer.from(bytes));
+    return path;
+  };
   return {
     objects,
     async uploadOriginal({ scanId, imageId, image }) {
-      const path = objectPath({ scanId, imageId, ext: image.ext });
-      if (objects.has(path)) throw new Error('Storage upload failed: The resource already exists');
-      objects.set(path, Buffer.from(image.buffer));
-      return path;
+      return put(objectPath({ scanId, imageId, ext: image.ext }), image.buffer);
+    },
+    async uploadMask({ scanId, imageId, png }) {
+      if (failOn === 'uploadMask') throw new Error('Storage mask upload failed: timeout');
+      return put(maskPath({ scanId, imageId }), png);
     },
     async signedUrl(path, purpose) {
       return `https://storage.test/${path}?purpose=${purpose}`;
     },
+    // Like Supabase, a path with no object signs as null.
     async signedUrls(paths, purpose) {
       return new Map(
-        paths.map((path) => [path, `https://storage.test/${path}?purpose=${purpose}`]),
+        paths.map((path) => [
+          path,
+          objects.has(path) ? `https://storage.test/${path}?purpose=${purpose}` : null,
+        ]),
       );
     },
     async remove(path) {

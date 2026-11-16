@@ -1,3 +1,5 @@
+import base64
+import io
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -5,9 +7,17 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from PIL import Image
 
 import app as app_module
-from app import ServiceError, create_app, decode_image, download_image
+from app import (
+    ServiceError,
+    create_app,
+    decode_image,
+    download_image,
+    encode_mask,
+    with_mask,
+)
 from tests.conftest import API_KEY, analyze_body, png_bytes
 
 EXAMPLE = json.loads(
@@ -135,6 +145,54 @@ def test_a_seam_error_is_a_500_without_details(client, monkeypatch):
     res = post(client, analyze_body())
     assert_error(res, 500, "INTERNAL_ERROR")
     assert "secret" not in res.get_data(as_text=True)
+
+
+def decode_png(text):
+    with Image.open(io.BytesIO(base64.b64decode(text))) as img:
+        return img.mode, np.asarray(img).astype(bool)
+
+
+def test_encode_mask_is_a_one_bit_png_of_the_mask():
+    mask = np.zeros((6, 9), dtype=bool)
+    mask[1:4, 2:7] = True
+    mode, decoded = decode_png(encode_mask(mask))
+    assert mode == "1"
+    assert np.array_equal(decoded, mask)
+
+
+class FakeSegmenter:
+    """Shaped like plantvision's LeafSegmenter: analyze() builds its mask through self.mask()."""
+
+    def __init__(self, detected=True):
+        self.detected = detected
+
+    def mask(self, image):
+        return image[:, :, 1] > 100
+
+    def analyze(self, image):
+        mask = self.mask(image)
+        return {"segmentation": {"plant_detected": self.detected, "leaf_fraction": mask.mean()}}
+
+
+def test_with_mask_returns_the_mask_analyze_computed():
+    image = np.zeros((4, 5, 3), dtype=np.uint8)
+    image[:2, :, 1] = 200
+    body = with_mask(FakeSegmenter())(image)
+    _, decoded = decode_png(body["segmentation"]["mask_png"])
+    assert np.array_equal(decoded, image[:, :, 1] > 100)
+
+
+def test_with_mask_leaves_out_the_mask_when_no_plant_was_found():
+    body = with_mask(FakeSegmenter(detected=False))(np.zeros((4, 5, 3), dtype=np.uint8))
+    assert "mask_png" not in body["segmentation"]
+
+
+def test_with_mask_never_reuses_an_earlier_request_mask():
+    model = FakeSegmenter()
+    analyze = with_mask(model)
+    analyze(np.full((4, 5, 3), 200, dtype=np.uint8))
+    model.analyze = lambda image: {"segmentation": {"plant_detected": True}}
+    assert "mask_png" not in analyze(np.zeros((4, 5, 3), dtype=np.uint8))["segmentation"]
 
 
 def test_unknown_routes_use_the_error_shape(client):

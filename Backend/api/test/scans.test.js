@@ -2,6 +2,7 @@ import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createApp } from '../src/app.js';
+import { InferenceError } from '../src/inference/errors.js';
 import { createMockInference, mockExample } from '../src/inference/mock.js';
 import { REJECTIONS } from '../src/services/qualityGate.js';
 import { makeImage, makePhoto, PHONE_EXIF } from './images.js';
@@ -9,8 +10,7 @@ import { fakeDb, fakeStorage, SEED_CONFIG, silentLogger, testEnv } from './helpe
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-function setup({ env = {}, db = fakeDb(), inference } = {}) {
-  const storage = fakeStorage();
+function setup({ env = {}, db = fakeDb(), storage = fakeStorage(), inference } = {}) {
   const app = createApp({ env: testEnv(env), logger: silentLogger, db, storage, inference });
   return { app, db, storage };
 }
@@ -98,7 +98,9 @@ describe('POST /api/v1/scans', () => {
       status: 'completed',
       image: {
         id: image.id,
+        pair_number: 1,
         url: `https://storage.test/${path}?purpose=client`,
+        mask_url: null,
         width: 1280,
         height: 1024,
         mime_type: 'image/jpeg',
@@ -460,4 +462,92 @@ describe('POST /api/v1/scans', () => {
       expect(db.tables.scans).toEqual([]);
     },
   );
+});
+
+describe('leaf mask pairs', () => {
+  // A 1 x 1 PNG, standing in for the mask inference computed.
+  const MASK_PNG =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAQAAAAA3bvkkAAAACklEQVR4nGNoAAAAggCBd81ytgAAAABJRU5ErkJggg==';
+  const withMask = (maskPng = MASK_PNG, overrides = {}) => {
+    const body = { ...mockBody, ...overrides };
+    body.segmentation = { ...mockBody.segmentation, mask_png: maskPng };
+    return body;
+  };
+
+  it('stores the mask beside its photo under the same image id and returns its URL', async () => {
+    const { app, db, storage } = setup({ inference: answering(withMask()) });
+
+    const res = await postScan(app).attach('image', await makePhoto(), 'a.jpg');
+
+    expect(res.status).toBe(201);
+    const { scan_id: scanId, image } = res.body;
+    const mask = `scans/${scanId}/${image.id}.mask.png`;
+    expect(storage.objects.get(mask).equals(Buffer.from(MASK_PNG, 'base64'))).toBe(true);
+    expect(storage.objects.has(`scans/${scanId}/${image.id}.jpg`)).toBe(true);
+    expect(image.pair_number).toBe(1);
+    expect(image.mask_url).toBe(`https://storage.test/${mask}?purpose=client`);
+    expect(db.tables.analyses[0].raw_response).toEqual(mockBody);
+
+    const read = await request(app).get(`/api/v1/scans/${scanId}`);
+    expect(read.body.image).toMatchObject({ pair_number: 1, mask_url: image.mask_url });
+  });
+
+  it('numbers a retake as the next pair and pairs its own mask with it', async () => {
+    const lowConfidence = withMask(MASK_PNG, {
+      estimate: { ...mockBody.estimate, confidence: 0.2 },
+    });
+    const { app, storage } = setup({ inference: answering(lowConfidence) });
+    const first = await postScan(app).attach('image', await makePhoto(), 'a.jpg');
+    expect(first.body.status).toBe('abstained');
+    const scanId = first.body.scan_id;
+
+    const retake = await request(app)
+      .post(`/api/v1/scans/${scanId}/images`)
+      .attach('image', await makePhoto(), 'b.jpg');
+
+    expect(retake.status).toBe(201);
+    const { image } = retake.body;
+    expect(image.pair_number).toBe(2);
+    expect(image.mask_url).toContain(`scans/${scanId}/${image.id}.mask.png`);
+    expect([...storage.objects.keys()].filter((path) => path.endsWith('.mask.png'))).toEqual([
+      `scans/${scanId}/${first.body.image.id}.mask.png`,
+      `scans/${scanId}/${image.id}.mask.png`,
+    ]);
+  });
+
+  it('still completes the scan when the mask cannot be stored', async () => {
+    const storage = fakeStorage({ failOn: 'uploadMask' });
+    const { app } = setup({ storage, inference: answering(withMask()) });
+
+    const res = await postScan(app).attach('image', await makePhoto(), 'a.jpg');
+
+    expect(res.status).toBe(201);
+    expect(res.body.status).toBe('completed');
+    expect(res.body.image.mask_url).toBeNull();
+  });
+
+  it('skips a mask that is not a PNG', async () => {
+    const notPng = Buffer.from('not a png').toString('base64');
+    const { app, storage } = setup({ inference: answering(withMask(notPng)) });
+
+    const res = await postScan(app).attach('image', await makePhoto(), 'a.jpg');
+
+    expect(res.body.status).toBe('completed');
+    expect(res.body.image.mask_url).toBeNull();
+    expect([...storage.objects.keys()].some((path) => path.endsWith('.mask.png'))).toBe(false);
+  });
+
+  it('keeps the mask out of raw_response when the response fails the schema', async () => {
+    const invalid = withMask(MASK_PNG, { model_version: '' });
+    const inference = createMockInference({ allowScenarios: false });
+    inference.analyze = async () => {
+      throw new InferenceError('schema-invalid response', { body: invalid });
+    };
+    const { app, db } = setup({ inference });
+
+    const res = await postScan(app).attach('image', await makePhoto(), 'a.jpg');
+
+    expect(res.status).toBe(503);
+    expect(db.tables.analyses[0].raw_response.segmentation).not.toHaveProperty('mask_png');
+  });
 });

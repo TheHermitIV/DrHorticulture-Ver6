@@ -255,15 +255,42 @@ function renderFacts(container, fields) {
   }
 }
 
+// The photo and its leaf mask, named by their shared pair number: "Plant 2" and "Mask 2" for a
+// scan's first retake. Each is hidden when the scan object has no URL for it.
+function renderPair(image) {
+  const pair = Number.isInteger(image?.pair_number) ? ` ${image.pair_number}` : '';
+  const photo = element('stored-image');
+  const overlay = element('mask-overlay');
+  const mask = element('mask-image');
+  const hasPhoto = Boolean(image?.url);
+  const hasMask = hasPhoto && Boolean(image?.mask_url);
+  element('plant-caption').textContent = `Plant${pair}`;
+  element('mask-caption').textContent = `Mask${pair}`;
+  for (const [img, url] of [
+    [photo, hasPhoto && image.url],
+    [overlay, hasMask && image.mask_url],
+    [mask, hasMask && image.mask_url],
+  ]) {
+    if (url) img.src = url;
+    else img.removeAttribute('src');
+  }
+  element('plant-figure').hidden = !hasPhoto;
+  element('mask-figure').hidden = element('overlay-toggle').hidden = !hasMask;
+  overlay.hidden = !hasMask || !element('show-overlay').checked;
+  element('mask-missing').hidden = !hasPhoto || hasMask;
+}
+
 function initializeLookup(form) {
   const button = form.querySelector('button');
-  const image = element('stored-image');
   const panel = element('scan-details');
+  element('show-overlay').addEventListener('change', (event) => {
+    element('mask-overlay').hidden = !event.target.checked || !element('mask-image').src;
+  });
   async function load(scanId) {
     if (!scanId || button.disabled) return;
     button.disabled = true;
-    panel.hidden = image.hidden = true;
-    image.removeAttribute('src');
+    panel.hidden = true;
+    renderPair(null);
     status.textContent = 'Looking up scan…';
     try {
       const { ok, body } = await requestScan(`/api/v1/scans/${encodeURIComponent(scanId)}`);
@@ -285,6 +312,13 @@ function initializeLookup(form) {
           body.created_at && Number.isFinite(created.getTime()) ? created.toLocaleString() : null,
         ],
         ['Photo ID', id],
+        [
+          'Photo pair',
+          Number.isInteger(body.image?.pair_number)
+            ? `Plant ${body.image.pair_number}` +
+              (body.image.mask_url ? ` · Mask ${body.image.pair_number}` : '')
+            : null,
+        ],
         ['Resolution', width && height ? `${width} × ${height} px` : null],
         ['Image format', type],
         [
@@ -315,10 +349,7 @@ function initializeLookup(form) {
         .filter(([key, value]) => Object.hasOwn(metricLabels, key) && Number.isFinite(value))
         .map(([key, value]) => [metricLabels[key], value]);
       renderFacts(element('metrics'), metrics.length ? metrics : [['Measurements', 'Unavailable']]);
-      if (body.image?.url) {
-        image.src = body.image.url;
-        image.hidden = false;
-      }
+      renderPair(body.image);
       panel.hidden = false;
       status.textContent = 'Scan loaded.';
       const url = new URL(location.href);

@@ -122,6 +122,12 @@ the error in `analyses.error`. In mock mode outside production, the `x-mock-scen
 (`low_confidence`, `no_plant`, `error`) forces each outcome; the mock keeps its own copy of
 `contracts/inference.v1.example.json` because Railway builds the api from `api/` alone.
 
+When inference sends `segmentation.mask_png` (LeafSegmenter does when it finds a plant), the pipeline
+stores it as `scans/{scan_id}/{image_id}.mask.png`, paired with the photo by image id, and drops it from
+`analyses.raw_response`. A mask that can't be stored never fails the scan. Readers find a mask by that
+name (`maskPath()` in `storage.js`), and a photo with no mask signs as a null `mask_url`.
+`scan_images.pair_number` (1, then 2+ for retakes) is set by a database trigger, not the api.
+
 `POST /api/v1/scans/:id/images` (a retake) runs the same pipeline on a new image in an existing scan,
 which keeps its species and earlier images. Only `rejected`, `abstained`, and `failed` scans take one
 (else 409 `INVALID_STATE`); the claim is a conditional status update (`scans.setStatus(..., { from })`),
