@@ -193,6 +193,7 @@ create table scans (
 create table scan_images (
   id                 uuid primary key default gen_random_uuid(),
   scan_id            uuid not null references scans(id) on delete cascade,
+  pair_number        int not null check (pair_number >= 1),  -- 1, then 2+ for retakes; set by a trigger
   storage_path       text not null unique,          -- scans/{scan_id}/{image_id}.jpg
   mime_type          text not null,
   width              int,
@@ -201,7 +202,8 @@ create table scan_images (
   quality_passed     boolean,
   quality_metrics    jsonb not null default '{}',
   rejection_reasons  text[] not null default '{}',
-  created_at         timestamptz not null default now()
+  created_at         timestamptz not null default now(),
+  unique (scan_id, pair_number)
 );
 
 create table decision_config (
@@ -268,6 +270,8 @@ values (1, 0.50, 0.70, 0.80,
 
 The storage bucket `scan-images` is private. The object path is `scans/{scan_id}/{image_id}.{ext}`. The original file is stored untouched, and nothing is ever overwritten.
 
+A photo and the leaf mask inference computed on it form a pair. In storage they share the image id: the mask is `scans/{scan_id}/{image_id}.mask.png`, a PNG where white is leaf. `scan_images.pair_number` numbers a scan's photos (1 for the first, 2 and up for retakes), and the photo and its mask share it, shown as "Plant N" and "Mask N". A trigger (migration `0005`) assigns the number. No column records whether a mask exists: the api looks it up by its paired name, and a photo without one gets no mask URL.
+
 `updated_at` on `scans` is set by the api on every status change; no trigger is needed.
 
 ## API specification
@@ -293,7 +297,7 @@ The scan object is returned by every scan endpoint:
   "scan_id": "uuid",
   "species": "geranium",
   "status": "completed",
-  "image": { "id": "uuid", "url": "<signed URL, 1 h>", "width": 1024, "height": 1024, "mime_type": "image/jpeg", "quality": { "passed": true, "metrics": {}, "rejection_reasons": [] } },
+  "image": { "id": "uuid", "pair_number": 1, "url": "<signed URL, 1 h>", "mask_url": "<signed URL, 1 h, or null>", "width": 1024, "height": 1024, "mime_type": "image/jpeg", "quality": { "passed": true, "metrics": {}, "rejection_reasons": [] } },
   "result": {
     "recommendation": "fertilize",
     "ndvi": 0.41,
@@ -307,7 +311,7 @@ The scan object is returned by every scan endpoint:
 }
 ```
 
-`species` is what the client sent, or `null`. `result` is `null` while the status is `processing`, `rejected`, or `failed`.
+`species` is what the client sent, or `null`. `result` is `null` while the status is `processing`, `rejected`, or `failed`. `image.pair_number` is the photo's number within the scan, and `image.mask_url` is a signed URL for its leaf mask, or `null` when none was stored (inference sent none, or storing it failed).
 
 The error shape is shared by every endpoint:
 
@@ -383,6 +387,7 @@ Field rules (enforced by `api/src/inference/schema.js` on every response):
 | `segmentation.plant_detected` | boolean | — | Yes |
 | `segmentation.mask_confidence` | number | 0 to 1 | Yes |
 | `segmentation.leaf_fraction` | number | 0 to 1 | Yes |
+| `segmentation.mask_png` | string | base64 PNG, 1 to 2,000,000 characters | No |
 | `species.top_label` | string | non-empty | Yes |
 | `species.top_prob` | number | 0 to 1 | Yes |
 | `features` | object of numbers | any keys, no range | Yes (may be empty) |
@@ -398,6 +403,7 @@ Field rules (enforced by `api/src/inference/schema.js` on every response):
 - `estimate.ndvi` keeps the physical NDVI range, -1 to 1, so a regression head that overshoots slightly does not fail the scan. GreenSeeker ground truth is 0.00–0.99. `TODO(decision):` narrow it to 0–1 if the team prefers.
 - `features` are color indices such as VARI, ExG, GLI, and NGRDI, computed on the masked canopy pixels. Some of them are negative by definition, so they have no range. They are the Sprint 2 baseline and stay in the response.
 - `calibration_card` is optional because no CV function produces it yet; the example and the stubs leave it out.
+- `mask_png` is the foliage mask the numbers were computed on: white is leaf, black is background. It may be smaller than the photo, since the model works on a resized copy, but it keeps the photo's aspect ratio after EXIF orientation. LeafSegmenter sends it when it finds a plant; the example and the stubs leave it out. The api stores it beside the photo (see Data model), skips one that is not a PNG or fails to upload without failing the scan, and drops it from `analyses.raw_response`.
 - The api stores the full response body in `analyses.raw_response`, so fields it does not use (species, ensemble spread) survive for evaluation.
 - When no plant is found, the service still returns 200 with `plant_detected: false` and every required field filled in (placeholder numbers are fine), so the scan is `rejected` rather than `failed`.
 
@@ -427,7 +433,7 @@ def predict(features, species_probs) -> dict:
 - `cv/embedder.py`: backbone → `embedding` (placeholder until a backbone is chosen); species classifier → `species_probs`. It also defines `SPECIES_LABELS` (length K), which `app.py` uses to turn `species_probs` into `species.top_label` and `species.top_prob`.
 - `cv/features.py`: VARI, ExG, GLI, NGRDI and the other color indices on the masked pixels. These are the ML stage's representation for now.
 - `ml/regressor.py`: loads a trained JSON bundle (`ML_WEIGHTS_PATH`, format in `ml/bundle.py`) and runs its ensemble heads → `ndvi`, `ensemble_std`, `confidence`. `ENSEMBLE_SIZE` comes from the bundle, reported as `estimate.ensemble_size`. With no bundle it returns the stub values.
-- `app.py` handles HTTP, the key check, request validation, and the image download; calls `cv.analyze`, then `ml.predict(cv_out["features"], cv_out["species_probs"])`; and assembles the v1 response. `mask` and `embedding` never leave the service.
+- `app.py` handles HTTP, the key check, request validation, and the image download; calls `cv.analyze`, then `ml.predict(cv_out["features"], cv_out["species_probs"])`; and assembles the v1 response. `embedding` never leaves the service, and neither does the stub path's `mask`; with LeafSegmenter, `app.py` sends the mask as `segmentation.mask_png`.
 - Training writes the bundle: `python -m training.ndvi.pipeline --images … --labels … --out …` (see `docs/ML_TRAINING_HANDOFF.md`). It extracts features through the same `cv.analyze` path, so training and serving cannot drift.
 - `SPECIES_LABELS` and `ENSEMBLE_SIZE` are `TODO(decision):` additions. The seams return neither the label names nor the head count, and the response needs both.
 - The inference Docker image loads LeafSegmenter and its NDVI estimator at startup. For local development, `CV_ENGINE` selects `stub` or the standalone `plantvision` feature pipeline when `LEAF_SEGMENTER_ENABLED` is off.
@@ -762,3 +768,4 @@ Every open decision has a working default, so none of them blocks the build. Whe
 | 2026-10-03 | Backend files moved under `Backend/`; the iOS app (`ios/`) renamed `Front-End/`; the README, license, `Assets/`, and `.github/` stay at the repo root. The api's Railway root directory becomes `/Backend/api`, and inference's config file `Backend/inference/railway.json` | Owner's restructure: one folder per side of the product at the root. Paths inside `Backend/` are unchanged |
 | 2026-10-31 | ML seam is now `ml.predict(features, species_probs)`; added the JSON model bundle (`inference/ml/bundle.py`), `ML_WEIGHTS_PATH`, and the offline training pipeline (`plantvision/training/ndvi/pipeline.py`) with a greenness post-adjustment in the bundle | At the current dataset size the CV color features are the model's representation; the frozen-backbone embedding is deferred. The HTTP v1 response and `decide()` are unchanged |
 | 2026-11-10 | The LeafSegmenter model (`inference/weights/leaf-segmenter-v1.0.0.json`) is committed and baked into the inference image; `LEAF_SEGMENTER_MODEL_PATH` becomes an optional override | Owner's decision: deploy by switching the Railway branch alone, with no volume or upload step. The model is now public with the repo |
+| 2026-11-13 | Leaf masks are stored as pairs with their photos: inference v1 gains the optional `segmentation.mask_png`; `scan_images.pair_number` (migration `0005`, set by a trigger); the scan object gains `image.pair_number` and `image.mask_url` | Owner's request: show on Scan Details the area the model analyzed, as "Plant N" and "Mask N". The field is optional, so the frozen v1 contract stays backward compatible. The trigger lets the api and the migration deploy in either order |

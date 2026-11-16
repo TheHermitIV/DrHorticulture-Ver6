@@ -87,7 +87,28 @@ To reverse the quality settings, deactivate the new version and reactivate the
 previous version in one transaction. Keep both rows so existing analyses retain
 their configuration history.
 
-## 5. Roll back if the smoke test fails
+## 5. Store leaf masks with their photos
+
+Apply `Backend/supabase/migrations/0005_scan_image_pairs.sql` to the target Supabase
+database. It numbers every photo within its scan (`scan_images.pair_number`: 1, then
+2 and up for retakes) and adds a trigger that numbers new photos, so it can be applied
+before or after the services are deployed. Deploy inference and the API from the same
+revision. The services can go out in either order, but masks are only stored once both are live.
+
+From then on, inference sends the leaf mask with each scan where it finds a plant. The
+API saves it beside the photo, paired by the image id:
+
+| File | Contents |
+| --- | --- |
+| `scans/{scan_id}/{image_id}.jpg` | The original photo ("Plant N") |
+| `scans/{scan_id}/{image_id}.mask.png` | Its leaf mask, white where the model saw leaves ("Mask N") |
+
+Smoke test: submit a clear plant photo from the test page and open **Scan Details**.
+Expect **Plant 1** and **Mask 1** side by side, and the photo darkened outside the leaves
+while **Darken everything outside the mask** is checked. Scans from before this change
+show the photo with "No leaf mask was stored for this photo."
+
+## 6. Roll back if the smoke test fails
 
 If inference fails to start, check its logs for a missing or unreadable model
 file and make sure `LEAF_SEGMENTER_MODEL_PATH` is unset or points at a real file.

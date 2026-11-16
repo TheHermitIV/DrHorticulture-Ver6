@@ -62,6 +62,8 @@ describe('analyzeResponseSchema', () => {
     ['segmentation.plant_detected', 'yes'],
     ['segmentation.mask_confidence', 1.01],
     ['segmentation.leaf_fraction', -0.01],
+    ['segmentation.mask_png', ''],
+    ['segmentation.mask_png', 7],
     ['species.top_label', ''],
     ['species.top_prob', 2],
     ['features.vari', '0.12'],

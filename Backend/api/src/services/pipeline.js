@@ -7,6 +7,7 @@ import { isUuid } from './ids.js';
 import { intake } from './intake.js';
 import { REJECTIONS, rejectionMessage, runQualityGate } from './qualityGate.js';
 import { toScanObject } from './scanObject.js';
+import { maskPath } from './storage.js';
 
 // The 422 for a Tier A or Tier B rejection. The photo stays stored on the rejected scan, so the
 // client can add a retake to it.
@@ -56,6 +57,17 @@ const toImageRow = ({ imageId, scanId, path, described, gate }) => ({
   rejection_reasons: gate.reasons,
 });
 
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+// The inference body as analyses.raw_response keeps it: without segmentation.mask_png, which is
+// stored as its own file and would otherwise bloat every row.
+function withoutMask(body) {
+  if (!body?.segmentation || !Object.hasOwn(body.segmentation, 'mask_png')) return body;
+  const segmentation = { ...body.segmentation };
+  delete segmentation.mask_png;
+  return { ...body, segmentation };
+}
+
 // Runs each step even when one fails. A failure is logged; the error the client sees is the
 // one that led here.
 async function bestEffort(log, message, steps) {
@@ -80,12 +92,28 @@ export function createPipeline({ db, storage, config, inference }) {
       () =>
         db.analyses.insert({
           ...base,
-          raw_response: inferenceFailed ? err.body : null,
+          raw_response: inferenceFailed ? withoutMask(err.body) : null,
           error: reason,
           latency_ms: latencyMs,
         }),
       () => db.scans.setStatus(base.scan_id, 'failed'),
     ]);
+  }
+
+  // Stores the leaf mask inference returned next to its photo. The mask is a diagnostic, so a
+  // mask that is not a PNG or fails to upload is logged and skipped, never failing the scan.
+  // TODO(decision): whether a scan should fail when its mask cannot be stored.
+  async function storeMask(log, { image, maskPng }) {
+    const png = Buffer.from(maskPng, 'base64');
+    if (!png.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
+      log.warn({ image_id: image.id }, 'leaf mask is not a PNG, not stored');
+      return;
+    }
+    try {
+      await storage.uploadMask({ scanId: image.scan_id, imageId: image.id, png });
+    } catch (err) {
+      log.warn({ err, image_id: image.id }, 'storing the leaf mask failed');
+    }
   }
 
   // Sends a stored image that passed Tier A to inference, applies decide(), and records the
@@ -104,6 +132,8 @@ export function createPipeline({ db, storage, config, inference }) {
       );
       latencyMs = elapsed();
       const decision = decide(response, cfg, image.quality_metrics);
+      const maskPng = response.segmentation.mask_png;
+      if (maskPng) await storeMask(log, { image, maskPng });
       const analysis = await db.analyses.insert({
         ...base,
         model_version: response.model_version,
@@ -114,7 +144,7 @@ export function createPipeline({ db, storage, config, inference }) {
         confidence: response.estimate.confidence,
         recommendation: decision.recommendation,
         abstain_reason: decision.status === 'abstained' ? decision.reason : null,
-        raw_response: body,
+        raw_response: withoutMask(body),
         latency_ms: latencyMs,
       });
       const leafLighting = response.checks.leaf_lighting;
@@ -174,8 +204,15 @@ export function createPipeline({ db, storage, config, inference }) {
   // The scan object for an analyzed image, or the 422 when decide() rejected it (Tier B).
   async function respond({ scan, image, analysis, decision }) {
     if (decision.status === 'rejected') throw rejection([decision.reason], scan.id);
-    const imageUrl = await storage.signedUrl(image.storage_path, 'client');
-    return toScanObject({ scan, image, imageUrl, analysis });
+    const mask = maskPath({ scanId: scan.id, imageId: image.id });
+    const urls = await storage.signedUrls([image.storage_path, mask], 'client');
+    return toScanObject({
+      scan,
+      image,
+      imageUrl: urls.get(image.storage_path) ?? null,
+      maskUrl: urls.get(mask) ?? null,
+      analysis,
+    });
   }
 
   return {
