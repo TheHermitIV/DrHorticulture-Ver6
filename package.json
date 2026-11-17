@@ -1,0 +1,7 @@
+{
+  "name": "drhorticulture-workspace",
+  "private": true,
+  "scripts": {
+    "test-page": "node Backend/api/scripts/test-page.js"
+  }
+}

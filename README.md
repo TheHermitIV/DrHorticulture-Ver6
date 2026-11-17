@@ -7,7 +7,7 @@ The app is a SwiftUI iOS client backed by a Node API and a Python inference serv
 every product rule (quality gate, thresholds, decision). The inference service turns an image into
 raw numbers and never decides, writes, or sees Supabase keys.
 
-> The inference Docker image defaults to LeafSegmenter v1.0.0 with its paired NDVI estimator.
+> The inference Docker image defaults to LeafSegmenter v1.1.0 with its paired NDVI estimator.
 > The model file ships in `Backend/inference/weights/`. See the
 > [training handoff](Backend/docs/ML_TRAINING_HANDOFF.md) for retraining and evaluation.
 
@@ -49,6 +49,23 @@ Inside `Backend/`:
 | `docs/` | [`BACKEND_SPEC.md`](Backend/docs/BACKEND_SPEC.md), [`ML_TRAINING_HANDOFF.md`](Backend/docs/ML_TRAINING_HANDOFF.md) |
 
 ## Quick start
+
+### Open the website
+
+From the repository root, run `npm run test-page` and keep the terminal open.
+The preview requires Node and npm. You can open any of these pages:
+
+- [Analyze Photo](http://localhost:3000/)
+- [Scan Details](http://localhost:3000/ImageData.html)
+- [Leaf Mask Creator](http://localhost:3000/leaf-mask.html)
+
+The team website lives in `Backend/api/public`. If you have an older standalone
+Leaf Lab checkout in `Web/`, its `dist` folder serves a separate site. Stop that
+server before starting the team website on port 3000. To use another port, run
+`npm run test-page -- --port 3001`.
+
+The scan pages use the deployed API by default. The Leaf Mask Creator processes
+photos and exports masks in your browser.
 
 ### Prerequisites
 
