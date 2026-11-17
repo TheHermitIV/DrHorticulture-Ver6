@@ -4,6 +4,9 @@ Ernesto can review and integrate `leaf-segmenter-demo` to update the existing
 Railway services. The iPhone continues to use the existing public API URL.
 LeafSegmenter v1.1.0 uses the same leaf mask model and a retrained NDVI estimator.
 
+For an existing installation with leaf lighting and stored masks already working,
+start at [Update Railway for provisional calibration](#7-update-railway-for-provisional-calibration).
+
 ## 1. Prepare the services before merging
 
 Open the existing Railway project and select **production**. Keep the current API
@@ -45,8 +48,8 @@ variable only to override the bundled model with a file on a mounted volume.
    By default, uploads create scans in the deployed database. Use `-- --api <api-url>`
    to target a test API. The website is a local preview and the mask creator runs
    in the browser. Submit a clear, centered plant photo.
-   Expect **Estimated NDVI** alongside **No fertilizer recommendation** while
-   confidence calibration is pending.
+   Before enabling the experimental demo rules, expect **Estimated NDVI**
+   alongside **No fertilizer recommendation** for LeafSegmenter v1.1.0.
 4. In Supabase, find the test scan's row in `analyses`. Check that
    `model_version` is `LeafSegmenter v1.1.0` and `ndvi` matches the phone up to
    rounding. Confirm that **Scan Details** opens the scan and shows the model
@@ -119,3 +122,67 @@ run one clear scan. Roll back the API too if its deployment or settings were par
 of the failure.
 
 [Railway rollback instructions](https://docs.railway.com/deployments/deployment-actions#rollback)
+
+## 7. Update Railway for provisional calibration
+
+1. In the target Supabase project, record the active `decision_config.version`
+   and apply [`0006_ndvi_cutoff_distance.sql`](../supabase/migrations/0006_ndvi_cutoff_distance.sql).
+   Apply it **before merging** if the API autodeploys from the target branch.
+   The updated API selects `ndvi_cutoff_distance` and `demo_calibration` on scan reads.
+2. Merge or deploy the calibration revision. In Railway **Deployments**, confirm
+   that both **inference** and **API** are running the intended Git commit. With
+   manual deployments, start with inference. Inference `/health` still says
+   `LeafSegmenter v1.1.0`, so use the deployed commit and a fresh scan to verify
+   the update. Confirm the API `/health` reports a working database and remote
+   inference, then scan a clear photo and check that Scan Details shows a leaf mask score.
+3. Enable the experimental rules in the database used by the demo API with the
+   SQL below. The rules are opt-in and apply to new scans on v1.1.0. If the demo
+   uses the production API and database, activating this row also affects other
+   new v1.1.0 scans on that API. Allow up to 60 seconds for the config cache to refresh.
+
+```sql
+begin;
+lock table public.decision_config in share row exclusive mode;
+with previous as (
+  update public.decision_config set active = false
+  where active
+    and (ndvi_threshold is distinct from 0.50
+      or not (quality @> '{"demo_mask_min":0.97,"demo_ndvi_buffer":0.11}'))
+  returning version, confidence_min, mask_min, quality
+)
+insert into public.decision_config
+  (version, ndvi_threshold, confidence_min, mask_min, quality, active, notes)
+select (select max(version) + 1 from public.decision_config),
+       0.50, confidence_min, mask_min,
+       quality || '{"demo_mask_min":0.97,"demo_ndvi_buffer":0.11}'::jsonb,
+       true, 'Experimental demo rules based on configuration ' || version
+from previous;
+commit;
+```
+
+Verify one active row with cutoff `0.50`, mask minimum `0.97`, and NDVI buffer `0.11`.
+
+```sql
+select version, ndvi_threshold, quality ->> 'demo_mask_min' as demo_mask_min,
+       quality ->> 'demo_ndvi_buffer' as demo_ndvi_buffer
+from public.decision_config
+where active;
+```
+
+Pull the same revision locally and run `npm run test-page` from `Backend/api`.
+Submit fresh scans and open **Scan Details**. Earlier scans retain their original results.
+
+| Smoke test | Expected result |
+| --- | --- |
+| `good-case-greenseeker-0.80.jpg` | Mask score about 0.990, NDVI about 0.806, range about 0.696–0.916, and **Demo recommendation · Do not fertilize**. |
+| `bad-case-greenseeker-0.81.jpg`, with leaf lighting and the 512 px minimum enabled | Mask score about 0.905 and **No fertilizer recommendation** if photo quality passes. |
+| Strong mask with NDVI from 0.39 through 0.61 inclusive | **No fertilizer recommendation** because the NDVI range touches or crosses 0.50. This boundary is covered by API tests. |
+
+The website reports the sample count behind the mask band and the provisional NDVI
+range. These outputs are for demonstration. See the [training handoff](ML_TRAINING_HANDOFF.md#confidence-experiments)
+for the benchmark and its limits.
+
+To disable demo recommendations, deactivate the demo row and reactivate the
+recorded previous configuration in one transaction. Keep the migration columns
+in place so the current API can continue reading scans. If a service deployment
+also needs to be reverted, roll it back using section 6.

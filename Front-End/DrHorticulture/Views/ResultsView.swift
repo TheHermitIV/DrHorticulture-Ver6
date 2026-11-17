@@ -44,6 +44,13 @@ struct ResultsView: View {
             case .recommendation(let recommendation, let ndvi, let confidence):
                 RecommendationCard(recommendation: recommendation)
                 ReadingCard(ndvi: ndvi, confidence: confidence)
+            case .demoRecommendation(let recommendation, let ndvi, let cutoffDistance):
+                Text("Experimental demo recommendation")
+                    .font(.headline)
+                RecommendationCard(recommendation: recommendation)
+                ReadingCard(ndvi: ndvi)
+                Text("Distance from NDVI cutoff: \(cutoffDistance.formatted(.number.precision(.fractionLength(3))))")
+                    .font(.caption)
             case .reading(let ndvi, let confidence):
                 ReadingCard(ndvi: ndvi, confidence: confidence)
             case .estimateWithoutRecommendation(let ndvi, let reason):

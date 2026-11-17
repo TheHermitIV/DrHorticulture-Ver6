@@ -44,6 +44,7 @@ struct AnalysisResult: Codable, Equatable {
     var abstainReason: String?
     var modelVersion: String?
     var configVersion: Int?
+    var ndviCutoffDistance: Double? = nil
 
     enum CodingKeys: String, CodingKey {
         case recommendation
@@ -52,6 +53,7 @@ struct AnalysisResult: Codable, Equatable {
         case abstainReason = "abstain_reason"
         case modelVersion = "model_version"
         case configVersion = "config_version"
+        case ndviCutoffDistance = "ndvi_cutoff_distance"
     }
 }
 

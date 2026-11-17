@@ -92,7 +92,14 @@ function initializeUpload(form) {
       status.textContent = hasReading ? 'Analysis complete.' : 'Estimated NDVI is unavailable.';
       if (hasReading) {
         element('ndvi').textContent = reading.ndvi.toFixed(3);
-        element('advice').textContent = recommendations[reading.recommendation] ?? '';
+        element('advice').textContent = recommendationLabel(reading) ?? '';
+        const scores = element('demo-scores');
+        scores.hidden = reading.ndvi_cutoff_distance == null;
+        renderFacts(scores, [
+          ['Leaf mask score', ndvi(body.diagnostics?.mask_confidence)],
+          ['Distance from demo NDVI cutoff', ndvi(reading.ndvi_cutoff_distance)],
+          ...calibrationFacts(reading),
+        ]);
         result.hidden = false;
       }
       if (body.status === 'abstained' && reading?.abstain_reason) {
@@ -142,11 +149,11 @@ function initializeUpload(form) {
       const scanId = body.scan_id ?? body.error?.scan_id ?? retakeId;
       const rejection =
         body.error?.code === 'IMAGE_REJECTED' ? { scanId, details: body.error.details } : undefined;
-      const { status: scanStatus, result, error } = body;
+      const { status: scanStatus, result, error, diagnostics } = body;
       await save({
         scanId,
         lastViewedId: scanId,
-        submission: { ok, body: { status: scanStatus, result, error } },
+        submission: { ok, body: { status: scanStatus, result, error, diagnostics } },
         rejection,
         retakeId: !ok
           ? (body.error?.scan_id ?? retakeId)
@@ -181,6 +188,7 @@ const scanStatuses = {
 };
 
 const abstainReasons = {
+  near_ndvi_cutoff: 'The provisional NDVI range touches or crosses the demo decision cutoff.',
   low_mask_confidence: 'The model was unsure which pixels belonged to the leaves.',
   low_confidence: 'The NDVI estimate was below the confidence required for a recommendation.',
 };
@@ -196,8 +204,13 @@ function confidenceDisplay(value, modelVersion) {
   return percent(value);
 }
 
-function describeAbstention({ abstain_reason: reason, model_version: modelVersion, confidence }) {
-  if (uncalibratedModels.has(modelVersion) && confidence === 0) {
+function describeAbstention({
+  abstain_reason: reason,
+  model_version: modelVersion,
+  confidence,
+  ndvi_cutoff_distance: distance,
+}) {
+  if (uncalibratedModels.has(modelVersion) && confidence === 0 && distance == null) {
     if (reason === 'low_mask_confidence') {
       return 'The model found leaves, but this version does not provide a calibrated leaf mask confidence score.';
     }
@@ -206,6 +219,28 @@ function describeAbstention({ abstain_reason: reason, model_version: modelVersio
     }
   }
   return reason ? (abstainReasons[reason] ?? readable(reason)) : 'No reason was reported.';
+}
+
+function recommendationLabel(result) {
+  const label = recommendations[result?.recommendation];
+  return label && result.ndvi_cutoff_distance != null && result.recommendation !== 'abstain'
+    ? `Demo recommendation · ${label}`
+    : label;
+}
+
+function calibrationFacts(result) {
+  const calibration = result?.demo_calibration;
+  if (!calibration) return [];
+  return [
+    [
+      'Reviewed masks with ≥ 0.70 overlap in this score band',
+      `${calibration.mask_matches} of ${calibration.mask_samples}`,
+    ],
+    [
+      'Provisional NDVI range',
+      `${ndvi(calibration.ndvi_low)}–${ndvi(calibration.ndvi_high)} (${calibration.ndvi_samples} calibration plants)`,
+    ],
+  ];
 }
 
 function renderDecision(scan) {
@@ -334,9 +369,21 @@ function initializeLookup(form) {
       element('estimate-details').hidden = !result && !diagnostics;
       renderFacts(element('estimate-facts'), [
         ['Estimated NDVI', result ? (ndvi(result.ndvi) ?? 'Unavailable') : null],
-        ['Recommendation', recommendations[result?.recommendation]],
-        ['Model confidence', confidenceDisplay(result?.confidence, modelVersion)],
-        ['Leaf mask confidence', confidenceDisplay(diagnostics?.mask_confidence, modelVersion)],
+        ['Recommendation', recommendationLabel(result)],
+        [
+          'Model confidence',
+          result?.ndvi_cutoff_distance == null
+            ? confidenceDisplay(result?.confidence, modelVersion)
+            : null,
+        ],
+        ['Distance from demo NDVI cutoff', ndvi(result?.ndvi_cutoff_distance)],
+        ...calibrationFacts(result),
+        [
+          'Leaf mask score',
+          uncalibratedModels.has(modelVersion) && diagnostics?.mask_confidence > 0
+            ? ndvi(diagnostics.mask_confidence)
+            : confidenceDisplay(diagnostics?.mask_confidence, modelVersion),
+        ],
         ['Photo covered by leaf mask', percent(diagnostics?.leaf_fraction)],
         [
           'Inference time',

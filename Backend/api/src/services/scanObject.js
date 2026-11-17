@@ -39,6 +39,12 @@ export function toScanObject({ scan, image, imageUrl, maskUrl = null, analysis =
             recommendation: analysis.recommendation,
             ndvi: analysis.ndvi,
             confidence: analysis.confidence,
+            ...(analysis.demo_calibration == null
+              ? {}
+              : { demo_calibration: analysis.demo_calibration }),
+            ...(analysis.ndvi_cutoff_distance == null
+              ? {}
+              : { ndvi_cutoff_distance: analysis.ndvi_cutoff_distance }),
             abstain_reason: analysis.abstain_reason,
             model_version: analysis.model_version,
             config_version: analysis.config_version,

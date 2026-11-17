@@ -73,7 +73,7 @@ class LeafSegmenter(SegmentationModel):
         self.intercept = artifact["intercept"]
         self.extractor = FeatureExtractor()
 
-    def mask(self, image):
+    def pixel_scores(self, image):
         features = pixel_features(image)
         pixels = features.reshape(-1, features.shape[-1])
         score = np.full(len(pixels), self.baseline)
@@ -84,7 +84,12 @@ class LeafSegmenter(SegmentationModel):
                 nodes = np.where(pixels[rows, feature[nodes]] <= threshold[nodes],
                                  left[nodes], right[nodes])
             score += value[nodes]
-        return clean_mask((score >= 0).reshape(features.shape[:2]), image.shape)
+        return score.reshape(features.shape[:2])
+
+    def mask(self, image, *, scores=None):
+        if scores is None:
+            scores = self.pixel_scores(image)
+        return clean_mask(scores >= 0, image.shape)
 
     def predict(self, image):
         mask = self.mask(image.array)
@@ -94,13 +99,17 @@ class LeafSegmenter(SegmentationModel):
 
     def analyze(self, image):
         rgb = prepare_rgb(image)
-        mask = self.mask(rgb)
+        scores = self.pixel_scores(rgb)
+        mask = self.mask(rgb, scores=scores)
         fraction = float(mask.mean())
         detected = MIN_FRACTION <= fraction <= MAX_FRACTION
         indices = self.extractor.extract(rgb, mask) if detected else None
         ndvi = float(np.clip(self.intercept + self.coefficients @ indices.to_vector(), 0, .99)) if detected else 0.0
         checks = {"angle_ok": True}
+        mask_score = 0.0
         if detected:
+            foreground = scores[scores >= 0]
+            mask_score = float(np.median(1 / (1 + np.exp(-foreground))))
             luminance = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)[mask]
             checks["leaf_lighting"] = {
                 "mean_luminance": round(float(luminance.mean()), 2),
@@ -108,7 +117,7 @@ class LeafSegmenter(SegmentationModel):
             }
         return {
             "model_version": self.model_version,
-            "segmentation": {"plant_detected": detected, "mask_confidence": 0.0,
+            "segmentation": {"plant_detected": detected, "mask_confidence": round(mask_score, 6),
                              "leaf_fraction": round(fraction, 6)},
             "species": {"top_label": "unknown", "top_prob": 0.0},
             "features": indices.to_dict() if indices is not None else {},

@@ -60,6 +60,26 @@ validation.
 
 ### Confidence experiments
 
+The experimental demo uses three foreground score bands from 25 out-of-fold masks.
+Using reviewed intersection over union of at least 0.70 as a match, scores below
+0.95 matched 0/12, scores from 0.95 to below 0.97 matched 2/4, and scores at or above
+0.97 matched 9/9. These are observed counts on development plants. The bands were
+selected after reviewing these data and still need testing on fresh masks.
+
+A separate teammate batch illustrates a failure outside the development set.
+All four examples that appear to show live plants passed the 0.97 score cutoff,
+but only three met the 0.70 overlap target against the submitted masks. The
+busy-background miss scored 0.985 with 0.349 overlap. Two artificial examples
+and one example with unconfirmed plant status were excluded from those counts.
+The batch has no paired GreenSeeker readings.
+
+The provisional NDVI range uses the absolute v1.1.0 errors on its 25 held-out
+GreenSeeker plants. For a nominal 90% split-conformal range, take the 24th smallest
+error (`ceil((25 + 1) * 0.90)`), 0.109189, rounded up to 0.110. The demo withholds
+advice if the range touches or crosses the configured NDVI cutoff. The nominal
+coverage assumes comparable future photos. These existing data do not establish
+coverage on fresh plants or validate the fertilizer cutoff.
+
 In five plant-disjoint folds on 25 reviewed masks, the 12 masks with the highest median
 foreground model score averaged **0.82** intersection over union with the reviewed masks.
 The other 13 averaged **0.47**. One of the top 12 still fell below **0.70** overlap, so this
