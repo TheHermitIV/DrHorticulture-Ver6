@@ -292,6 +292,9 @@ All endpoints live under `/api/v1` except `/health`, return JSON, and share one 
 
 The scan object is returned by every scan endpoint:
 
+Demo-mode results also include `result.ndvi_cutoff_distance`, the absolute distance in NDVI
+units from the configured threshold, and a stored `result.demo_calibration` snapshot with mask-band counts and NDVI interval bounds.
+
 ```json
 {
   "scan_id": "uuid",
@@ -487,7 +490,11 @@ The metrics are stored in `scan_images.quality_metrics` and returned as `image.q
 2. `angle_ok = false` → `rejected`, `bad_angle` (Tier B)
 3. In leaf lighting mode, a failed lighting check → `rejected` with its existing lighting reason
 4. `mask_confidence < mask_min` → `abstained`, `low_mask_confidence`
-5. `confidence < confidence_min` → `abstained`, `low_confidence`
+5. `confidence < confidence_min` → `abstained`, `low_confidence`. When the experimental
+   demo rules are enabled for LeafSegmenter v1.1.0, use `quality.demo_mask_min` in step 4
+   and the larger of the configured buffer and provisional calibrated NDVI radius in step 5. A range that touches or crosses the cutoff abstains with
+   `near_ndvi_cutoff`. The mask score is the median model score over foreground pixels
+   before mask cleanup, and the NDVI margin is in NDVI units. Neither is a calibrated probability.
 6. Otherwise `ndvi < ndvi_threshold` → `fertilize`, else `do_not_fertilize` (`completed`)
 
 ```js

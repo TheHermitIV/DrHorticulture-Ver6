@@ -5,6 +5,7 @@ import Foundation
 enum ResultsState: Equatable {
     /// The backend's call, with the reading behind it.
     case recommendation(Recommendation, ndvi: Double, confidence: Double)
+    case demoRecommendation(Recommendation, ndvi: Double, cutoffDistance: Double)
     /// A usable reading the backend did not turn into a call.
     case reading(ndvi: Double, confidence: Double)
     /// An estimate with an explicit decision to withhold fertilizer advice.
@@ -38,6 +39,8 @@ enum AbstentionReason {
         switch reason?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "low_confidence":
             return "The reading wasn't confident enough to make a call."
+        case "near_ndvi_cutoff":
+            return "The provisional NDVI range touches or crosses the demo decision cutoff."
         case "low_mask_confidence":
             return "The plant couldn't be found clearly in the photo."
         case let other? where !other.isEmpty:
@@ -108,7 +111,11 @@ extension ResultsState {
         }
 
         if let recommendation = Recommendation(responseValue: result.recommendation) {
-            self = .recommendation(recommendation, ndvi: ndvi, confidence: confidence)
+            if let distance = result.ndviCutoffDistance {
+                self = .demoRecommendation(recommendation, ndvi: ndvi, cutoffDistance: distance)
+            } else {
+                self = .recommendation(recommendation, ndvi: ndvi, confidence: confidence)
+            }
         } else {
             // A recommendation we don't recognise is never guessed at; the
             // reading alone is still honest.

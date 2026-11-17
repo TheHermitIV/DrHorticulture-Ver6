@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { mockExample } from '../src/inference/mock.js';
 import { decide } from '../src/services/decision.js';
+import { demoCalibration } from '../src/services/demoCalibration.js';
 import { SEED_CONFIG } from './helpers.js';
 
 const cfg = SEED_CONFIG; // ndvi_threshold 0.5, confidence_min 0.7, mask_min 0.8
@@ -28,6 +29,48 @@ const rejected = (reason) => ({ status: 'rejected', recommendation: null, reason
 const abstained = (reason) => ({ status: 'abstained', recommendation: 'abstain', reason });
 
 describe('decide', () => {
+  it.each([
+    [0.949, 0, 12],
+    [0.95, 2, 4],
+    [0.97, 9, 9],
+  ])(
+    'reports the observed mask band and calibrated NDVI interval for %s',
+    (mask, matches, samples) => {
+      expect(
+        demoCalibration(response({ mask, ndvi: 0.8064 }), {
+          ...cfg,
+          quality: { ...cfg.quality, demo_ndvi_buffer: 0.08 },
+        }),
+      ).toEqual({
+        mask_matches: matches,
+        mask_samples: samples,
+        ndvi_low: 0.6964,
+        ndvi_high: 0.9164,
+        ndvi_samples: 25,
+      });
+    },
+  );
+  it.each([
+    [0.389, 0.97, completed('fertilize')],
+    [0.611, 0.97, completed('do_not_fertilize')],
+    [0.39, 0.97, abstained('near_ndvi_cutoff')],
+    [0.61, 0.97, abstained('near_ndvi_cutoff')],
+    [0.5, 0.99, abstained('near_ndvi_cutoff')],
+    [0.8, 0.96, abstained('low_mask_confidence')],
+    [0.8, 0, abstained('low_mask_confidence')],
+  ])('applies demo rules for NDVI %s and mask score %s', (ndvi, mask, expected) => {
+    const demo = {
+      ...cfg,
+      quality: { ...cfg.quality, demo_mask_min: 0.97, demo_ndvi_buffer: 0.08 },
+    };
+    const sample = {
+      ...response({ ndvi, mask, confidence: 0 }),
+      model_version: 'LeafSegmenter v1.1.0',
+    };
+    expect(decide(sample, demo)).toEqual(expected);
+    if (mask >= 0.97) expect(decide(sample, cfg)).toEqual(abstained('low_confidence'));
+  });
+
   it('turns the contract example into do_not_fertilize at the v1 thresholds', () => {
     expect(decide(mockExample(), cfg)).toEqual(completed('do_not_fertilize'));
   });

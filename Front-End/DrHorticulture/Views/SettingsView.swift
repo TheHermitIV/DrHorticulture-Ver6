@@ -2,8 +2,20 @@ import SwiftUI
 
 /// Placeholder tab. Real settings arrive with the backend integration.
 struct SettingsView: View {
+    @AppStorage(AppTheme.storageKey) private var theme: AppTheme = .system
+
     var body: some View {
         List {
+            Section("Appearance") {
+                Picker("Theme", selection: $theme) {
+                    ForEach(AppTheme.allCases) { option in
+                        Text(option.label).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("settings.themePicker")
+            }
+
             Section("Analysis") {
                 LabeledContent("Source", value: "Mock service")
                     .accessibilityIdentifier("settings.source")

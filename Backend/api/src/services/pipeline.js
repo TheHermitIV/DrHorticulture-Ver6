@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import { AppError } from '../errors.js';
 import { InferenceError } from '../inference/errors.js';
-import { decide } from './decision.js';
+import { decide, demoNdviDistance } from './decision.js';
+import { demoCalibration } from './demoCalibration.js';
 import { isUuid } from './ids.js';
 import { intake } from './intake.js';
 import { REJECTIONS, rejectionMessage, runQualityGate } from './qualityGate.js';
@@ -132,6 +133,7 @@ export function createPipeline({ db, storage, config, inference }) {
       );
       latencyMs = elapsed();
       const decision = decide(response, cfg, image.quality_metrics);
+      const cutoffDistance = demoNdviDistance(response, cfg);
       const maskPng = response.segmentation.mask_png;
       if (maskPng) await storeMask(log, { image, maskPng });
       const analysis = await db.analyses.insert({
@@ -142,6 +144,14 @@ export function createPipeline({ db, storage, config, inference }) {
         features: response.features,
         ndvi: response.estimate.ndvi,
         confidence: response.estimate.confidence,
+        ...(cutoffDistance == null ||
+        decision.status === 'rejected' ||
+        response.segmentation.mask_confidence === 0
+          ? {}
+          : {
+              ndvi_cutoff_distance: cutoffDistance,
+              demo_calibration: demoCalibration(response, cfg),
+            }),
         recommendation: decision.recommendation,
         abstain_reason: decision.status === 'abstained' ? decision.reason : null,
         raw_response: withoutMask(body),

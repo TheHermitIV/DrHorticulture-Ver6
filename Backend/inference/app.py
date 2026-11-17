@@ -129,8 +129,8 @@ def with_mask(model):
     recorded = threading.local()
     compute_mask = model.mask
 
-    def recording_mask(image):
-        recorded.mask = compute_mask(image)
+    def recording_mask(image, **kwargs):
+        recorded.mask = compute_mask(image, **kwargs)
         return recorded.mask
 
     model.mask = recording_mask
