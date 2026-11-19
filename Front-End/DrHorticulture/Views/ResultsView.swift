@@ -4,6 +4,11 @@ struct ResultsView: View {
     @Environment(AppRouter.self) private var router
     @Environment(ScanSession.self) private var session
     @Environment(\.analysisService) private var analysisService
+    @Environment(ScanHistory.self) private var history
+
+    /// One history entry per visit: changing the mock scenario replaces it
+    /// rather than adding another.
+    @State private var recordID = UUID()
 
     @State private var viewModel: ResultsViewModel?
     /// Dev-only control so all three Results states can be seen without a
@@ -33,6 +38,11 @@ struct ResultsView: View {
             }
             viewModel = model
             await model.load(imageData: session.photo?.data, species: session.species)
+            if case .loaded(let state) = model.phase {
+                history.save(state, photo: session.photo?.image, id: recordID)
+            } else {
+                history.delete(id: recordID)
+            }
         }
     }
 
@@ -186,5 +196,6 @@ struct AbstentionCard: View {
         ResultsView()
             .environment(AppRouter())
             .environment(ScanSession())
+            .environment(ScanHistory.inMemory())
     }
 }
