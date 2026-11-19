@@ -4,7 +4,7 @@ extension XCUIApplication {
     /// Launches against the mock services, so no backend is involved.
     static func launchWithMocks() -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments += ["-useMockServices", "YES"]
+        app.launchArguments += ["-uiTesting"]
         app.launch()
         return app
     }

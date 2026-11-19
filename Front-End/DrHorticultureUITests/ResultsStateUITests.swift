@@ -67,4 +67,19 @@ final class ResultsStateUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["results.abstention"].waitForExistence(timeout: 10))
     }
+
+    func testAResultShowsUpInRecentScansOnHome() {
+        let app = launchToResults()
+
+        selectScenario("Fertilize", in: app)
+        XCTAssertTrue(app.staticTexts["results.recommendation"].waitForExistence(timeout: 10))
+
+        app.openTab("Home")
+
+        // Matched by label: SwiftUI decides how the row's elements combine.
+        let row = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "Fertilize")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["home.emptyHistory"].exists)
+    }
 }

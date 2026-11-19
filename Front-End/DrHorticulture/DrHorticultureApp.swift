@@ -3,7 +3,11 @@ import SwiftUI
 @main
 struct DrHorticultureApp: App {
     @State private var auth = AuthSession()
-    @AppStorage(AppTheme.storageKey) private var theme: AppTheme = .system
+
+    /// UI tests launch with `-uiTesting`: they get the mock services and an
+    /// in-memory history, so they never touch the production API and can drive
+    /// every Results state through the mock-response picker.
+    static let isUITesting = ProcessInfo.processInfo.arguments.contains("-uiTesting")
 
     var body: some Scene {
         WindowGroup {
@@ -15,7 +19,6 @@ struct DrHorticultureApp: App {
                 }
             }
             .environment(auth)
-            .preferredColorScheme(theme.colorScheme)
             .tint(.brand)
             .environment(
                 \.analysisService,
@@ -32,8 +35,15 @@ struct DrHorticultureApp: App {
 }
 
 struct RootView: View {
+    // Observed here rather than on the App: an App-level @AppStorage only
+    // reacts to the first change, so later theme picks never reached the UI.
+    @AppStorage(AppTheme.storageKey) private var theme: AppTheme = .system
     @State private var router = AppRouter()
     @State private var session = ScanSession()
+    // UI tests start from an empty, in-memory history so runs don't leak state.
+    @State private var history = DrHorticultureApp.isUITesting
+        ? ScanHistory.inMemory()
+        : ScanHistory.onDevice()
 
     var body: some View {
         @Bindable var router = router
@@ -69,6 +79,9 @@ struct RootView: View {
         }
         .environment(self.router)
         .environment(session)
+        .environment(history)
+        .onAppear { theme.apply() }
+        .onChange(of: theme) { _, newTheme in newTheme.apply() }
         .onChange(of: router.selectedTab) { previous, current in
             // Leaving Scan discards the in-progress capture, so returning to the
             // tab always starts clean.

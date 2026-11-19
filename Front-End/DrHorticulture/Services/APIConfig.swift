@@ -32,9 +32,10 @@ enum APIConfig {
         return url
     }
 
-    /// Debug builds launched with `-useMockServices YES` (the UI tests do) skip the
-    /// backend entirely: mock login and mock analysis.
+    /// UI tests (`-uiTesting`) and Debug builds launched with `-useMockServices YES`
+    /// skip the backend entirely: mock login and mock analysis.
     static var usesMockServices: Bool {
+        if DrHorticultureApp.isUITesting { return true }
         #if DEBUG
         return UserDefaults.standard.bool(forKey: "useMockServices")
         #else

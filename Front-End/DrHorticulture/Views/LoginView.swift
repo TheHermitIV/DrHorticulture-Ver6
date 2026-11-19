@@ -9,6 +9,8 @@ struct LoginView: View {
     @State private var username = ""
     @State private var password = ""
     @FocusState private var focusedField: Field?
+    // RootView applies theme changes; this covers launches that start here.
+    @AppStorage(AppTheme.storageKey) private var theme: AppTheme = .system
 
     private enum Field {
         case username
@@ -83,7 +85,10 @@ struct LoginView: View {
         }
         .padding(24)
         .brandBackground()
-        .onAppear { focusedField = .username }
+        .onAppear {
+            theme.apply()
+            focusedField = .username
+        }
     }
 
     private func submit() {
