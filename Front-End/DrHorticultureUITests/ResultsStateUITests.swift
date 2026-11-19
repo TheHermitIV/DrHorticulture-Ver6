@@ -6,10 +6,8 @@ import XCTest
 final class ResultsStateUITests: XCTestCase {
     private func launchToResults() -> XCUIApplication {
         continueAfterFailure = false
-        let app = XCUIApplication()
-        app.launchArguments = ["-uiTesting"]
-        app.launch()
-        app.tabBars.firstMatch.buttons["Scan"].tap()
+        let app = XCUIApplication.launchSignedIn()
+        app.openTab("Scan")
         app.buttons["capture.sampleButton"].tap()
         app.buttons["preview.acceptButton"].tap()
         XCTAssertTrue(app.staticTexts["results.title"].waitForExistence(timeout: 10))
@@ -76,7 +74,7 @@ final class ResultsStateUITests: XCTestCase {
         selectScenario("Fertilize", in: app)
         XCTAssertTrue(app.staticTexts["results.recommendation"].waitForExistence(timeout: 10))
 
-        app.tabBars.firstMatch.buttons["Home"].tap()
+        app.openTab("Home")
 
         // Matched by label: SwiftUI decides how the row's elements combine.
         let row = app.descendants(matching: .any)

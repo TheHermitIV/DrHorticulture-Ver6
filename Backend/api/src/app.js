@@ -6,8 +6,10 @@ import { pinoHttp } from 'pino-http';
 import { createInference } from './inference/index.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { requestId } from './middleware/requestId.js';
+import { authRouter } from './routes/auth.js';
 import { healthRouter } from './routes/health.js';
 import { scansRouter } from './routes/scans.js';
+import { createAuthService } from './services/auth.js';
 import { createConfigService } from './services/configService.js';
 import { createPipeline } from './services/pipeline.js';
 import { createScanReader } from './services/scanReader.js';
@@ -31,6 +33,11 @@ export function createApp({ env, logger, db, storage, inference = createInferenc
   const config = createConfigService({ db });
 
   app.use(healthRouter({ env, db }));
+  app.use(
+    authRouter({
+      auth: createAuthService({ username: env.LOGIN_USERNAME, password: env.LOGIN_PASSWORD }),
+    }),
+  );
   app.use(
     scansRouter({
       env,
