@@ -293,7 +293,9 @@ All endpoints live under `/api/v1` except `/health`, return JSON, and share one 
 The scan object is returned by every scan endpoint:
 
 Demo-mode results also include `result.ndvi_cutoff_distance`, the absolute distance in NDVI
-units from the configured threshold, and a stored `result.demo_calibration` snapshot with mask-band counts and NDVI interval bounds.
+units from the configured threshold, and a stored `result.demo_calibration` snapshot with mask-quality support and NDVI interval bounds.
+New snapshots use `analyses.raw_response._api_decision` so deployment works with
+the existing table schema. Older dedicated columns remain readable when present.
 
 ```json
 {
@@ -351,7 +353,7 @@ v1 was revised in place on 2026-10-01, because no inference service was live yet
 
 **What the models do** (owned by the ML team; the backend treats them as a black box):
 
-1. LeafSegmenter classifies pixels as target foliage or background. The deployed model estimates NDVI from features inside the mask and reports zero confidence pending calibration. Steps 2–5 describe the general training path.
+1. LeafSegmenter classifies pixels as target foliage or background. v1.2.0 estimates NDVI from masked features, predicts mask quality, and supplies model-specific provisional NDVI uncertainty. Steps 2–5 describe the general training path.
 2. A frozen pretrained CNN backbone turns the image into an embedding. **Deferred:** at the current dataset size the first model uses the CV color features as its representation, so the embedding stays a placeholder until a backbone is justified.
 3. A pretrained species classifier (external, not trained by the team) reads the image and outputs a probability distribution over species.
 4. Shallow regression heads (ridge, GBM, or a small MLP) take the color features plus the species probabilities and estimate NDVI.
@@ -491,10 +493,13 @@ The metrics are stored in `scan_images.quality_metrics` and returned as `image.q
 3. In leaf lighting mode, a failed lighting check → `rejected` with its existing lighting reason
 4. `mask_confidence < mask_min` → `abstained`, `low_mask_confidence`
 5. `confidence < confidence_min` → `abstained`, `low_confidence`. When the experimental
-   demo rules are enabled for LeafSegmenter v1.1.0, use `quality.demo_mask_min` in step 4
-   and the larger of the configured buffer and provisional calibrated NDVI radius in step 5. A range that touches or crosses the cutoff abstains with
-   `near_ndvi_cutoff`. The mask score is the median model score over foreground pixels
-   before mask cleanup, and the NDVI margin is in NDVI units. Neither is a calibrated probability.
+   demo rules are enabled for LeafSegmenter v1.2.0, use `quality.demo_mask_quality_min` in step 4
+   and the larger of `quality.demo_ndvi_buffer` and `calibration.ndvi_radius` in step 5. A range that touches or crosses the cutoff abstains with
+   `near_ndvi_cutoff`. The new mask confidence estimates whether overlap reaches 0.70 using a fitted quality
+   model. NDVI confidence is residual support within ±0.100 NDVI, and the interval is
+   calibrated on separate plants. These estimates remain provisional. Legacy models
+   no longer receive the old fixed mask bands. v1.2.0 abstains until its demo settings
+   and compatible confidence metadata are present.
 6. Otherwise `ndvi < ndvi_threshold` → `fertilize`, else `do_not_fertilize` (`completed`)
 
 ```js
@@ -568,7 +573,7 @@ Infrastructure settings live in env vars; product thresholds live in the `decisi
 | `ML_WEIGHTS_PATH` | inference | `/app/inference/weights/model.json` | JSON bundle written by `training/ndvi/pipeline.py`; unset means stub values |
 | `CV_ENGINE` | inference | `stub` | Local feature pipeline selector when LeafSegmenter mode is off |
 | `LEAF_SEGMENTER_ENABLED` | inference | `true` in Docker | Loads LeafSegmenter and its paired NDVI estimator |
-| `LEAF_SEGMENTER_MODEL_PATH` | inference | unset (`inference/weights/leaf-segmenter-v1.1.0.json`, in the image) | Optional override, such as a file on a mounted volume |
+| `LEAF_SEGMENTER_MODEL_PATH` | inference | unset (`inference/weights/leaf-segmenter-v1.2.0.json`, in the image) | Optional override, such as a file on a mounted volume |
 
 Locally, run the api with `INFERENCE_MODE=mock` so it needs nothing but Supabase. The inference service can also run locally on port 8000, with `INFERENCE_URL=http://localhost:8000` and the same `INFERENCE_API_KEY` on both sides, to test `remote` mode.
 
@@ -748,6 +753,16 @@ Every open decision has a working default, so none of them blocks the build. Whe
 - Lab ground truth is GreenSeeker NDVI only (whole canopy, 0.00–0.99) and arrives as a CSV that can be matched to a stored image id or file name.
 - The iOS client waits at least 150 s for `POST /scans` and `POST /scans/:id/images`, since a cold start plus one retry can take over 2 minutes. URLSession's default 60 s request timeout is too short.
 - The dataset stays small (hundreds to low thousands of images), so no partitioning or CDN is needed.
+
+### Optional confidence response metadata
+
+The additive `calibration` object is supported by the shared contract and Zod
+schema. `method` is `provisional-v2`; positive integer `mask_samples` and
+`ndvi_samples` identify calibration support. `mask_overlap_target` and
+`ndvi_nominal_coverage` are unit scores. `ndvi_radius` and `ndvi_tolerance`
+are positive NDVI distances. Legacy responses can omit the object. The API
+stores its model-specific snapshot in `analyses.raw_response._api_decision` and applies
+the configured mask-quality threshold and NDVI cutoff.
 
 ## Change log
 

@@ -41,6 +41,10 @@ enum AbstentionReason {
             return "The reading wasn't confident enough to make a call."
         case "near_ndvi_cutoff":
             return "The provisional NDVI range touches or crosses the demo decision cutoff."
+        case "demo_not_enabled":
+            return "Experimental recommendations have not been enabled for this model."
+        case "uncertainty_unavailable":
+            return "The model did not provide compatible uncertainty information."
         case "low_mask_confidence":
             return "The plant couldn't be found clearly in the photo."
         case let other? where !other.isEmpty:

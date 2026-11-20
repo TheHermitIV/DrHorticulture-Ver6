@@ -16,6 +16,7 @@ const configSchema = z.object({
     lighting_scope: z.enum(['image', 'leaf']).optional(),
     demo_ndvi_buffer: z.number().positive().max(1).optional(),
     demo_mask_min: z.number().positive().max(1).optional(),
+    demo_mask_quality_min: z.number().positive().max(1).optional(),
     min_short_side_px: threshold,
     luminance_min: threshold,
     luminance_max: threshold,

@@ -1,8 +1,7 @@
 import { latestBy, unwrap } from './result.js';
 
-// What the scan object's result needs; raw_response stays in the table.
-const RESULT_COLUMNS =
-  'id, image_id, model_version, config_version, ndvi, confidence, ndvi_cutoff_distance, demo_calibration, recommendation, abstain_reason, mask_confidence, leaf_fraction, latency_ms, created_at';
+// Read legacy optional columns when present and the JSON snapshot on all schema versions.
+// The presenter explicitly selects public fields and never returns raw_response.
 
 export function analysesQueries(supabase) {
   return {
@@ -20,7 +19,7 @@ export function analysesQueries(supabase) {
         'select from analyses',
         await supabase
           .from('analyses')
-          .select(RESULT_COLUMNS)
+          .select()
           .in('image_id', imageIds)
           .order('created_at', { ascending: false }),
       );

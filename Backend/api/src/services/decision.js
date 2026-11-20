@@ -10,7 +10,7 @@
 // plus the 422 details for a rejection.
 
 import { lightingRejection } from './qualityGate.js';
-import { ndviErrorRadius } from './demoCalibration.js';
+import { demoCalibration, hasDemoCalibration } from './demoCalibration.js';
 
 const reject = (reason) => ({ status: 'rejected', recommendation: null, reason });
 const abstain = (reason) => ({ status: 'abstained', recommendation: 'abstain', reason });
@@ -18,8 +18,8 @@ const abstain = (reason) => ({ status: 'abstained', recommendation: 'abstain', r
 export function demoNdviDistance(response, cfg) {
   if (
     cfg.quality.demo_ndvi_buffer == null ||
-    cfg.quality.demo_mask_min == null ||
-    response.model_version !== 'LeafSegmenter v1.1.0'
+    cfg.quality.demo_mask_quality_min == null ||
+    !hasDemoCalibration(response)
   ) {
     return null;
   }
@@ -35,10 +35,13 @@ export function decide(response, cfg, imageMetrics) {
     if (reason) return reject(reason);
   }
   const distance = demoNdviDistance(response, cfg);
-  const maskMinimum = distance == null ? cfg.mask_min : cfg.quality.demo_mask_min;
+  if (response.model_version === 'LeafSegmenter v1.2.0' && distance == null) {
+    return abstain(hasDemoCalibration(response) ? 'demo_not_enabled' : 'uncertainty_unavailable');
+  }
+  const maskMinimum = distance == null ? cfg.mask_min : cfg.quality.demo_mask_quality_min;
   if (s.mask_confidence < maskMinimum) return abstain('low_mask_confidence');
   if (distance == null && e.confidence < cfg.confidence_min) return abstain('low_confidence');
-  if (distance != null && distance <= Math.max(cfg.quality.demo_ndvi_buffer, ndviErrorRadius))
+  if (distance != null && distance <= demoCalibration(response, cfg).ndvi_radius)
     return abstain('near_ndvi_cutoff');
   return {
     status: 'completed',

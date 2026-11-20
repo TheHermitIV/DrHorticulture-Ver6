@@ -7,7 +7,7 @@ The app is a SwiftUI iOS client backed by a Node API and a Python inference serv
 every product rule (quality gate, thresholds, decision). The inference service turns an image into
 raw numbers and never decides, writes, or sees Supabase keys.
 
-> The inference Docker image defaults to LeafSegmenter v1.1.0 with its paired NDVI estimator.
+> The inference Docker image defaults to LeafSegmenter v1.2.0 with its paired NDVI estimator.
 > The model file ships in `Backend/inference/weights/`. See the
 > [training handoff](Backend/docs/ML_TRAINING_HANDOFF.md) for retraining and evaluation.
 

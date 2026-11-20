@@ -75,10 +75,23 @@
               "type": "number",
               "minimum": 0,
               "maximum": 1,
-              "description": "Derived from the ensemble spread by the service; the api never recomputes it."
+              "description": "Model-specific score returned by inference. With provisional-v2 calibration this is empirical residual support within the stated NDVI tolerance. Legacy models may derive it from ensemble spread."
             },
             "ensemble_std": { "type": "number", "minimum": 0 },
             "ensemble_size": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "calibration": {
+          "type": "object",
+          "required": ["method", "mask_samples", "mask_overlap_target", "ndvi_samples", "ndvi_radius", "ndvi_nominal_coverage", "ndvi_tolerance"],
+          "properties": {
+            "method": { "type": "string", "const": "provisional-v2" },
+            "mask_samples": { "type": "integer", "minimum": 1 },
+            "mask_overlap_target": { "type": "number", "minimum": 0, "maximum": 1 },
+            "ndvi_samples": { "type": "integer", "minimum": 1 },
+            "ndvi_radius": { "type": "number", "exclusiveMinimum": 0, "maximum": 2 },
+            "ndvi_nominal_coverage": { "type": "number", "minimum": 0, "maximum": 1 },
+            "ndvi_tolerance": { "type": "number", "exclusiveMinimum": 0, "maximum": 2 }
           }
         },
         "checks": {

@@ -5,6 +5,7 @@ final class NavigationFlowUITests: XCTestCase {
     private func launch() -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting"]
         app.launch()
         return app
     }

@@ -36,6 +36,17 @@ export const analyzeResponseSchema = z.object({
     ensemble_std: z.number().min(0),
     ensemble_size: z.int().min(1),
   }),
+  calibration: z
+    .object({
+      method: z.literal('provisional-v2'),
+      mask_samples: z.int().min(1),
+      mask_overlap_target: unit,
+      ndvi_samples: z.int().min(1),
+      ndvi_radius: z.number().positive().max(2),
+      ndvi_nominal_coverage: unit,
+      ndvi_tolerance: z.number().positive().max(2),
+    })
+    .optional(),
   checks: z.object({
     angle_ok: z.boolean(),
     leaf_lighting: z

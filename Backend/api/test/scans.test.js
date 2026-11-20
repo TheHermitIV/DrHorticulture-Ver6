@@ -37,6 +37,47 @@ const metrics = {
 const mockBody = { ...mockExample(), model_version: 'mock-0.1' };
 
 describe('POST /api/v1/scans', () => {
+  it.each([true, false])(
+    'persists and retrieves v1.2 confidence with demo enabled = %s',
+    async (enabled) => {
+      const body = mockExample();
+      body.model_version = 'LeafSegmenter v1.2.0';
+      body.estimate.ndvi = 0.8;
+      body.estimate.confidence = 0.63;
+      body.calibration = {
+        method: 'provisional-v2',
+        mask_samples: 45,
+        mask_overlap_target: 0.7,
+        ndvi_samples: 17,
+        ndvi_radius: 0.19,
+        ndvi_nominal_coverage: 0.9,
+        ndvi_tolerance: 0.1,
+      };
+      const config = {
+        ...SEED_CONFIG,
+        quality: {
+          ...SEED_CONFIG.quality,
+          ...(enabled ? { demo_mask_quality_min: 0.8, demo_ndvi_buffer: 0.11 } : {}),
+        },
+      };
+      const { app, db } = setup({ db: fakeDb({ config }), inference: answering(body) });
+      const posted = await postScan(app).attach('image', await makePhoto(), 'a.jpg');
+      expect(posted.status).toBe(201);
+      expect(posted.body.status).toBe(enabled ? 'completed' : 'abstained');
+      expect(db.tables.analyses[0]).not.toHaveProperty('demo_calibration');
+      expect(db.tables.analyses[0]).not.toHaveProperty('ndvi_cutoff_distance');
+      expect(posted.body.result.demo_calibration).toMatchObject({
+        mask_samples: 45,
+        ndvi_samples: 17,
+        ndvi_low: 0.61,
+        ndvi_high: 0.99,
+        ndvi_radius: 0.19,
+      });
+      const retrieved = await request(app).get('/api/v1/scans/' + posted.body.scan_id);
+      expect(retrieved.body.result).toEqual(posted.body.result);
+    },
+  );
+
   it.each([
     ['dark', { tone: [0.35, 0] }],
     ['bright', { glare: 0.5 }],

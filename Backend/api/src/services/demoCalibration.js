@@ -1,21 +1,27 @@
-// Development calibration for the bundled v1.1.0 estimator. See ML_TRAINING_HANDOFF.md.
-const maskBands = [
-  { minimum: 0.97, matches: 9, samples: 9 },
-  { minimum: 0.95, matches: 2, samples: 4 },
-  { minimum: 0, matches: 0, samples: 12 },
-];
-export const ndviErrorRadius = 0.11;
+// Confidence metadata belongs to the model that produced it. Legacy models have none.
+export function hasDemoCalibration(response) {
+  return (
+    response.model_version === 'LeafSegmenter v1.2.0' &&
+    response.calibration?.method === 'provisional-v2'
+  );
+}
 
 export function demoCalibration(response, cfg) {
-  const score = response.segmentation.mask_confidence;
+  if (!hasDemoCalibration(response)) return null;
+  const c = response.calibration;
   const estimate = response.estimate.ndvi;
-  const radius = Math.max(cfg.quality.demo_ndvi_buffer, ndviErrorRadius);
-  const { matches, samples } = maskBands.find(({ minimum }) => score >= minimum);
+  const radius = Math.max(cfg.quality.demo_ndvi_buffer ?? 0, c.ndvi_radius);
   return {
-    mask_matches: matches,
-    mask_samples: samples,
+    method: c.method,
+    mask_samples: c.mask_samples,
+    mask_confidence: response.segmentation.mask_confidence,
+    mask_overlap_target: c.mask_overlap_target,
+    ndvi_radius: radius,
     ndvi_low: Number(Math.max(-1, estimate - radius).toFixed(6)),
     ndvi_high: Number(Math.min(1, estimate + radius).toFixed(6)),
-    ndvi_samples: 25,
+    ndvi_samples: c.ndvi_samples,
+    ndvi_nominal_coverage: c.ndvi_nominal_coverage,
+    ndvi_tolerance: c.ndvi_tolerance,
+    ndvi_confidence: response.estimate.confidence,
   };
 }
