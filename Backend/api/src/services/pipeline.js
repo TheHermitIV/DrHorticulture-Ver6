@@ -134,6 +134,7 @@ export function createPipeline({ db, storage, config, inference }) {
       latencyMs = elapsed();
       const decision = decide(response, cfg, image.quality_metrics);
       const cutoffDistance = demoNdviDistance(response, cfg);
+      const calibration = demoCalibration(response, cfg);
       const maskPng = response.segmentation.mask_png;
       if (maskPng) await storeMask(log, { image, maskPng });
       const analysis = await db.analyses.insert({
@@ -144,17 +145,19 @@ export function createPipeline({ db, storage, config, inference }) {
         features: response.features,
         ndvi: response.estimate.ndvi,
         confidence: response.estimate.confidence,
-        ...(cutoffDistance == null ||
-        decision.status === 'rejected' ||
-        response.segmentation.mask_confidence === 0
-          ? {}
-          : {
-              ndvi_cutoff_distance: cutoffDistance,
-              demo_calibration: demoCalibration(response, cfg),
-            }),
         recommendation: decision.recommendation,
         abstain_reason: decision.status === 'abstained' ? decision.reason : null,
-        raw_response: withoutMask(body),
+        raw_response: {
+          ...withoutMask(body),
+          ...(calibration == null || decision.status === 'rejected'
+            ? {}
+            : {
+                _api_decision: {
+                  ...(cutoffDistance == null ? {} : { ndvi_cutoff_distance: cutoffDistance }),
+                  demo_calibration: calibration,
+                },
+              }),
+        },
         latency_ms: latencyMs,
       });
       const leafLighting = response.checks.leaf_lighting;

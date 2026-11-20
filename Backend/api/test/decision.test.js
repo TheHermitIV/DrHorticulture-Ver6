@@ -29,46 +29,56 @@ const rejected = (reason) => ({ status: 'rejected', recommendation: null, reason
 const abstained = (reason) => ({ status: 'abstained', recommendation: 'abstain', reason });
 
 describe('decide', () => {
-  it.each([
-    [0.949, 0, 12],
-    [0.95, 2, 4],
-    [0.97, 9, 9],
-  ])(
-    'reports the observed mask band and calibrated NDVI interval for %s',
-    (mask, matches, samples) => {
-      expect(
-        demoCalibration(response({ mask, ndvi: 0.8064 }), {
-          ...cfg,
-          quality: { ...cfg.quality, demo_ndvi_buffer: 0.08 },
-        }),
-      ).toEqual({
-        mask_matches: matches,
-        mask_samples: samples,
-        ndvi_low: 0.6964,
-        ndvi_high: 0.9164,
-        ndvi_samples: 25,
-      });
+  const calibrated = (options = {}) => ({
+    ...response({ confidence: 0.5, ...options }),
+    model_version: 'LeafSegmenter v1.2.0',
+    calibration: {
+      method: 'provisional-v2',
+      mask_samples: 45,
+      mask_overlap_target: 0.7,
+      ndvi_samples: 17,
+      ndvi_radius: 0.195,
+      ndvi_nominal_coverage: 0.9,
+      ndvi_tolerance: 0.1,
     },
-  );
+  });
+  const demo = {
+    ...cfg,
+    quality: {
+      ...cfg.quality,
+      demo_mask_quality_min: 0.8,
+      demo_ndvi_buffer: 0.11,
+    },
+  };
+  it('stores uncertainty from the same model and honors the configured minimum buffer', () => {
+    expect(demoCalibration(calibrated({ ndvi: 0.8 }), demo)).toMatchObject({
+      method: 'provisional-v2',
+      mask_samples: 45,
+      ndvi_samples: 17,
+      ndvi_low: 0.605,
+      ndvi_high: 0.995,
+      ndvi_radius: 0.195,
+    });
+    expect(demoCalibration(response(), demo)).toBeNull();
+  });
   it.each([
-    [0.389, 0.97, completed('fertilize')],
-    [0.611, 0.97, completed('do_not_fertilize')],
-    [0.39, 0.97, abstained('near_ndvi_cutoff')],
-    [0.61, 0.97, abstained('near_ndvi_cutoff')],
-    [0.5, 0.99, abstained('near_ndvi_cutoff')],
-    [0.8, 0.96, abstained('low_mask_confidence')],
-    [0.8, 0, abstained('low_mask_confidence')],
-  ])('applies demo rules for NDVI %s and mask score %s', (ndvi, mask, expected) => {
-    const demo = {
-      ...cfg,
-      quality: { ...cfg.quality, demo_mask_min: 0.97, demo_ndvi_buffer: 0.08 },
-    };
-    const sample = {
-      ...response({ ndvi, mask, confidence: 0 }),
-      model_version: 'LeafSegmenter v1.1.0',
-    };
-    expect(decide(sample, demo)).toEqual(expected);
-    if (mask >= 0.97) expect(decide(sample, cfg)).toEqual(abstained('low_confidence'));
+    [0.304, 0.8, completed('fertilize')],
+    [0.696, 0.8, completed('do_not_fertilize')],
+    [0.305, 0.8, abstained('near_ndvi_cutoff')],
+    [0.695, 0.8, abstained('near_ndvi_cutoff')],
+    [0.8, 0.79, abstained('low_mask_confidence')],
+  ])('uses calibrated mask quality and NDVI ranges for %s and %s', (ndvi, mask, expected) => {
+    expect(decide(calibrated({ ndvi, mask }), demo)).toEqual(expected);
+  });
+  it('withholds recommendations until the new settings and calibration are present', () => {
+    expect(decide(calibrated(), cfg)).toEqual(abstained('demo_not_enabled'));
+    expect(decide({ ...calibrated(), calibration: undefined }, demo)).toEqual(
+      abstained('uncertainty_unavailable'),
+    );
+    const legacy = { ...response({ confidence: 0 }), model_version: 'LeafSegmenter v1.1.0' };
+    expect(decide(legacy, { ...demo, quality: { ...demo.quality, demo_mask_min: 0.97 } })).toEqual(
+      abstained('low_confidence'),
+    );
   });
 
   it('turns the contract example into do_not_fertilize at the v1 thresholds', () => {

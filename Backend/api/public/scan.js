@@ -94,9 +94,14 @@ function initializeUpload(form) {
         element('ndvi').textContent = reading.ndvi.toFixed(3);
         element('advice').textContent = recommendationLabel(reading) ?? '';
         const scores = element('demo-scores');
-        scores.hidden = reading.ndvi_cutoff_distance == null;
+        scores.hidden = reading.ndvi_cutoff_distance == null && !reading.demo_calibration;
         renderFacts(scores, [
-          ['Leaf mask score', ndvi(body.diagnostics?.mask_confidence)],
+          [
+            'Leaf mask score',
+            reading.demo_calibration?.method === 'provisional-v2'
+              ? null
+              : ndvi(body.diagnostics?.mask_confidence),
+          ],
           ['Distance from demo NDVI cutoff', ndvi(reading.ndvi_cutoff_distance)],
           ...calibrationFacts(reading),
         ]);
@@ -188,6 +193,9 @@ const scanStatuses = {
 };
 
 const abstainReasons = {
+  demo_not_enabled:
+    'The experimental recommendation settings have not been enabled for this model.',
+  uncertainty_unavailable: 'This model did not provide compatible uncertainty information.',
   near_ndvi_cutoff: 'The provisional NDVI range touches or crosses the demo decision cutoff.',
   low_mask_confidence: 'The model was unsure which pixels belonged to the leaves.',
   low_confidence: 'The NDVI estimate was below the confidence required for a recommendation.',
@@ -231,6 +239,22 @@ function recommendationLabel(result) {
 function calibrationFacts(result) {
   const calibration = result?.demo_calibration;
   if (!calibration) return [];
+  if (calibration.method === 'provisional-v2')
+    return [
+      ['Mask quality confidence', percent(calibration.mask_confidence)],
+      [
+        'Mask confidence target',
+        `At least ${ndvi(calibration.mask_overlap_target)} overlap; fitted on ${calibration.mask_samples} plant examples`,
+      ],
+      [
+        'Provisional NDVI range',
+        `${ndvi(calibration.ndvi_low)}–${ndvi(calibration.ndvi_high)} (${calibration.ndvi_samples} calibration plants)`,
+      ],
+      [
+        `Reference support within ±${ndvi(calibration.ndvi_tolerance)} NDVI`,
+        percent(calibration.ndvi_confidence),
+      ],
+    ];
   return [
     [
       'Reviewed masks with ≥ 0.70 overlap in this score band',
@@ -371,18 +395,23 @@ function initializeLookup(form) {
         ['Estimated NDVI', result ? (ndvi(result.ndvi) ?? 'Unavailable') : null],
         ['Recommendation', recommendationLabel(result)],
         [
-          'Model confidence',
-          result?.ndvi_cutoff_distance == null
+          modelVersion === 'LeafSegmenter v1.2.0'
+            ? 'Reference support within ±0.100 NDVI'
+            : 'Model confidence',
+          result?.ndvi_cutoff_distance == null &&
+          result?.demo_calibration?.method !== 'provisional-v2'
             ? confidenceDisplay(result?.confidence, modelVersion)
             : null,
         ],
         ['Distance from demo NDVI cutoff', ndvi(result?.ndvi_cutoff_distance)],
         ...calibrationFacts(result),
         [
-          'Leaf mask score',
-          uncalibratedModels.has(modelVersion) && diagnostics?.mask_confidence > 0
-            ? ndvi(diagnostics.mask_confidence)
-            : confidenceDisplay(diagnostics?.mask_confidence, modelVersion),
+          modelVersion === 'LeafSegmenter v1.2.0' ? 'Mask quality confidence' : 'Leaf mask score',
+          result?.demo_calibration?.method === 'provisional-v2'
+            ? null
+            : uncalibratedModels.has(modelVersion) && diagnostics?.mask_confidence > 0
+              ? ndvi(diagnostics.mask_confidence)
+              : confidenceDisplay(diagnostics?.mask_confidence, modelVersion),
         ],
         ['Photo covered by leaf mask', percent(diagnostics?.leaf_fraction)],
         [

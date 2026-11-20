@@ -9,6 +9,9 @@ const WITH_RESULT = new Set(['completed', 'abstained']);
 // scan's photos (1, then 2+ for retakes); the photo and its leaf mask share it, shown as
 // "Plant N" and "Mask N". maskUrl is null when no mask was stored for the photo.
 export function toScanObject({ scan, image, imageUrl, maskUrl = null, analysis = null }) {
+  const snapshot = analysis?.raw_response?._api_decision;
+  const calibration = analysis?.demo_calibration ?? snapshot?.demo_calibration;
+  const distance = analysis?.ndvi_cutoff_distance ?? snapshot?.ndvi_cutoff_distance;
   return {
     scan_id: scan.id,
     species: scan.species,
@@ -39,12 +42,8 @@ export function toScanObject({ scan, image, imageUrl, maskUrl = null, analysis =
             recommendation: analysis.recommendation,
             ndvi: analysis.ndvi,
             confidence: analysis.confidence,
-            ...(analysis.demo_calibration == null
-              ? {}
-              : { demo_calibration: analysis.demo_calibration }),
-            ...(analysis.ndvi_cutoff_distance == null
-              ? {}
-              : { ndvi_cutoff_distance: analysis.ndvi_cutoff_distance }),
+            ...(calibration == null ? {} : { demo_calibration: calibration }),
+            ...(distance == null ? {} : { ndvi_cutoff_distance: distance }),
             abstain_reason: analysis.abstain_reason,
             model_version: analysis.model_version,
             config_version: analysis.config_version,

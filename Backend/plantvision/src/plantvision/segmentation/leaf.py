@@ -9,6 +9,7 @@ from PIL import Image
 from plantvision import SegmentationError
 from plantvision.features.extractor import FEATURE_KEYS, FeatureExtractor
 from plantvision.segmentation.model import SegmentationModel, SegmentationResult
+from plantvision.segmentation.confidence import mask_confidence, ndvi_uncertainty
 
 MODEL_FORMAT = "palm-demo-v1"
 MODEL_VERSION = "LeafSegmenter v1.0.0"
@@ -72,6 +73,8 @@ class LeafSegmenter(SegmentationModel):
         self.coefficients = np.asarray(artifact["coefficients"])
         self.intercept = artifact["intercept"]
         self.extractor = FeatureExtractor()
+        self.mask_quality = artifact.get("mask_quality")
+        self.ndvi_uncertainty = artifact.get("ndvi_uncertainty")
 
     def pixel_scores(self, image):
         features = pixel_features(image)
@@ -107,22 +110,37 @@ class LeafSegmenter(SegmentationModel):
         ndvi = float(np.clip(self.intercept + self.coefficients @ indices.to_vector(), 0, .99)) if detected else 0.0
         checks = {"angle_ok": True}
         mask_score = 0.0
+        quality_confidence = 0.0
+        error_radius, estimate_confidence = 0.0, 0.0
         if detected:
             foreground = scores[scores >= 0]
             mask_score = float(np.median(1 / (1 + np.exp(-foreground))))
+            quality_confidence = mask_confidence(scores, self.mask_quality) if self.mask_quality else mask_score
+            if self.ndvi_uncertainty:
+                error_radius, estimate_confidence = ndvi_uncertainty(indices.to_vector(), self.ndvi_uncertainty)
             luminance = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)[mask]
             checks["leaf_lighting"] = {
                 "mean_luminance": round(float(luminance.mean()), 2),
                 "clipped_pct": round(100 * float((luminance >= 250).mean()), 2),
             }
-        return {
+        response = {
             "model_version": self.model_version,
-            "segmentation": {"plant_detected": detected, "mask_confidence": round(mask_score, 6),
+            "segmentation": {"plant_detected": detected, "mask_confidence": round(quality_confidence, 6),
                              "leaf_fraction": round(fraction, 6)},
             "species": {"top_label": "unknown", "top_prob": 0.0},
             "features": indices.to_dict() if indices is not None else {},
-            # Single ridge head. Confidence stays zero until calibrated.
-            "estimate": {"ndvi": round(ndvi, 6), "confidence": 0.0,
+            "estimate": {"ndvi": round(ndvi, 6), "confidence": round(estimate_confidence, 6),
                          "ensemble_std": 0.0, "ensemble_size": 1},
             "checks": checks,
         }
+        if self.mask_quality and self.ndvi_uncertainty and detected:
+            response["calibration"] = {
+                "method": "provisional-v2",
+                "mask_samples": self.mask_quality["fit_samples"],
+                "mask_overlap_target": self.mask_quality["overlap_target"],
+                "ndvi_samples": self.ndvi_uncertainty["samples"],
+                "ndvi_radius": round(error_radius, 6),
+                "ndvi_nominal_coverage": self.ndvi_uncertainty["nominal_coverage"],
+                "ndvi_tolerance": self.ndvi_uncertainty["tolerance"],
+            }
+        return response

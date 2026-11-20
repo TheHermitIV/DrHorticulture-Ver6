@@ -2,15 +2,68 @@
 
 ## LeafSegmenter
 
-The inference Docker image defaults to **LeafSegmenter v1.1.0** and its paired NDVI estimator.
+The inference Docker image defaults to **LeafSegmenter v1.2.0** and its paired NDVI estimator.
 Follow the [Railway deployment runbook](RAILWAY_DEPLOYMENT.md) for the rollout and smoke test.
-The default artifact ships in the repo at `Backend/inference/weights/leaf-segmenter-v1.1.0.json`
+The default artifact ships in the repo at `Backend/inference/weights/leaf-segmenter-v1.2.0.json`
 and is copied into the image. To ship a new version, replace that file (and its `.gitignore` and
 `.dockerignore` exceptions if the name changes), or point `LEAF_SEGMENTER_MODEL_PATH` at a file on a mount.
-`GET /health` reports the loaded version. The API stores the NDVI estimate and abstains
-from fertilizer advice while confidence calibration is pending.
+`GET /health` reports the loaded version. The API stores model-specific confidence snapshots. Experimental advice requires
+the opt-in settings described in the runbook and a mask and NDVI interval that
+both pass. Confidence remains provisional on the small development collections.
+
+### Data and release status after corrected reviews
+
+There are **157 paired GreenSeeker plants**: 122 from the earlier collections and
+35 from Daniel's new session. The latter has 36 main photos, with 24a/24b sharing
+one plant, plus 6 low-resolution duplicates excluded from fitting. Owner-confirmed
+plant IDs keep the two views together. There are 59 reviewed mask pairs, comprising
+25 original pairs, 17 Andres pairs, 7 Reynaldo pairs, and 10 corrected Daniel pairs.
+The 10 Daniel masks overlap the paired dataset. They add labels, not new plants.
+
+56 mask pairs were included in the experiments. Two artificial examples and one
+product example without confirmed live-plant status were excluded. CropAndWeedAndLeaf
+has 345 labeled crops, of which the same 40 were tested as an optional supplement.
+The multi-layer dataset has 233 single-leaf images; 70 masks differ in dimensions
+from their photos. It was inspected and omitted from fitting.
+
+The corrected segmenter improved overlap from 0.542 to 0.671 on 11 reserved masks
+and reached the 0.70 overlap target on 7/11 versus 3/11. Its combined NDVI fit did
+not win the training cross-validation comparison, so v1.2.0 retains the original
+segmenter and fits NDVI on 118 plants with the leaf-coverage coefficient set to zero.
+
+| NDVI test collection | Plants | v1.1.0 MAE | v1.2.0 MAE |
+| --- | --- | --- | --- |
+| Older | 15 | 0.0477 | 0.0627 |
+| New Daniel session | 7 | 0.1605 | 0.0682 |
+| Combined | 22 | 0.0836 | 0.0644 |
+
+The current confidence release uses eight mask diagnostics, including threshold
+stability, fragmentation, foreground scores, and foreground position. A regularized
+logistic model fits 45 examples. The original 25 use excluded-plant segmentation
+predictions, and 20 newly reviewed examples are separate from segmenter training.
+A second logistic calibration is fitted to cross-validation predictions.
+On 11 reserved examples, Brier score decreased from 0.642 to 0.106. At a 0.80
+quality threshold, two masks passed and one was below the 0.70 overlap target.
+Thus the model improves calibration but still makes mask-quality errors.
+
+NDVI error scale is fitted using cross-validation errors from the 118 training
+plants. Seventeen separate calibration plants set a nominal 90% normalized
+residual range. It covered 21/22 test readings, including 7/7 from Daniel, with a
+mean radius of 0.178 versus a fixed 0.195 radius for the same overall coverage.
+The range is per-photo. Its reference support within ±0.100 NDVI is a smoothed
+empirical residual rank, not a validated conditional probability of correctness.
+
+All results are development comparisons on previously inspected collections.
+Only seven new-session plants are in the NDVI test set, and none are below 0.50.
+Collect fresh low-NDVI plants and retain collection-specific reporting before
+expanding the scope of the experimental recommendation.
 
 ### Add training data
+
+The mask/ridge trainer below produces a model candidate. After fitting new weights,
+refit the mask-quality predictor and NDVI residual model on excluded-plant
+predictions, then calibrate the NDVI interval using separate plants. The v1.2.0
+confidence parameters belong to its exact segmenter and NDVI coefficients.
 
 1. Copy the private review workspace and keep a separate set of plants for evaluation.
    Keep every photo of a given plant in the same split. Prioritize thin fronds, shadows,
@@ -31,8 +84,8 @@ from fertilizer advice while confidence calibration is pending.
 
    ```sh
    python Backend/inference/train_leaf_segmenter.py "/private/review-work" \
-     --model-version "LeafSegmenter v1.2.0" \
-     --output "/private/models/leaf-segmenter-v1.2.0.json"
+     --model-version "LeafSegmenter v1.3.0-candidate" \
+     --output "/private/models/leaf-segmenter-v1.3.0-candidate.json"
    ```
 
 5. Compare both model versions on the same held-out photos. Check mask overlap with
