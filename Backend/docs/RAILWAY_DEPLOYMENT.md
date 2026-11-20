@@ -153,7 +153,8 @@ The improved segmentation experiment remains separate.
 2. Merge or deploy the calibration revision. In Railway **Deployments**, confirm
    that both **inference** and **API** are running the intended Git commit. With
    manual deployments, start with inference. Inference `/health` should say
-   `LeafSegmenter v1.2.0`, and the scan response includes `calibration.method = provisional-v2`. Verify
+   `LeafSegmenter v1.2.0`. A fresh public scan response should include
+   `result.demo_calibration.method = provisional-v2`. Verify
    the deployed commit and submit a fresh scan. Confirm the API `/health` reports a working database and remote
    inference, then scan a clear photo and check that Scan Details shows a leaf mask score.
 3. Enable the experimental rules in the database used by the demo API with the
