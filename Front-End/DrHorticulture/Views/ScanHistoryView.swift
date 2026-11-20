@@ -90,6 +90,10 @@ struct ScanRecordDetailView: View {
                 }
 
                 if let recommendation = record.recommendation {
+                    if record.isDemo == true {
+                        Text("Experimental demo recommendation")
+                            .font(.headline)
+                    }
                     RecommendationCard(recommendation: recommendation)
                 } else {
                     Text(record.title)

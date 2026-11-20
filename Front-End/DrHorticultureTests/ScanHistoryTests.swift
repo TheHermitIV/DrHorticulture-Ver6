@@ -25,6 +25,22 @@ struct ScanHistoryTests {
         #expect(history.records.isEmpty)
     }
 
+    @Test func demoResultsKeepTheirLabelAfterDecoding() throws {
+        let record = try #require(ScanRecord(state: .demoRecommendation(.doNotFertilize, ndvi: 0.8, cutoffDistance: 0.3)))
+        let decoded = try JSONDecoder().decode(ScanRecord.self, from: JSONEncoder().encode(record))
+        #expect(decoded.isDemo == true)
+        #expect(decoded.title == "Demo · Don't fertilize")
+        #expect(decoded.confidence == nil)
+    }
+
+    @Test func recordsWithoutTheDemoFlagStillDecode() throws {
+        let record = try #require(ScanRecord(state: fertilize))
+        let data = try JSONEncoder().encode(record)
+        let decoded = try JSONDecoder().decode(ScanRecord.self, from: data)
+        #expect(decoded.isDemo == nil)
+        #expect(decoded.title == "Fertilize")
+    }
+
     @Test func savedScansSurviveARelaunch() throws {
         let directory = tempDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

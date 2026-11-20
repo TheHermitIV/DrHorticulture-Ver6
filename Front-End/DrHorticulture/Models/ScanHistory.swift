@@ -20,6 +20,7 @@ struct ScanRecord: Codable, Identifiable, Equatable {
     var ndvi: Double
     var confidence: Double?
     var note: String?
+    var isDemo: Bool?
 
     /// Only results with a usable reading are kept.
     /// TODO(decision): abstained and failed attempts are not saved, since they
@@ -32,6 +33,11 @@ struct ScanRecord: Codable, Identifiable, Equatable {
             outcome = recommendation == .fertilize ? .fertilize : .doNotFertilize
             self.ndvi = ndvi
             self.confidence = confidence
+        case .demoRecommendation(let recommendation, let ndvi, let cutoffDistance):
+            outcome = recommendation == .fertilize ? .fertilize : .doNotFertilize
+            self.ndvi = ndvi
+            isDemo = true
+            note = "Experimental demo recommendation. Distance from NDVI cutoff: \(cutoffDistance.formatted(.number.precision(.fractionLength(3))))"
         case .reading(let ndvi, let confidence):
             outcome = .reading
             self.ndvi = ndvi
@@ -47,8 +53,8 @@ struct ScanRecord: Codable, Identifiable, Equatable {
 
     var title: String {
         switch outcome {
-        case .fertilize: return "Fertilize"
-        case .doNotFertilize: return "Don't fertilize"
+        case .fertilize: return isDemo == true ? "Demo · Fertilize" : "Fertilize"
+        case .doNotFertilize: return isDemo == true ? "Demo · Don't fertilize" : "Don't fertilize"
         case .reading: return "Reading only"
         case .noRecommendation: return "No recommendation"
         }
