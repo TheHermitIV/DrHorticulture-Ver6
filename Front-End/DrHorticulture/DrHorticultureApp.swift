@@ -2,20 +2,34 @@ import SwiftUI
 
 @main
 struct DrHorticultureApp: App {
-    /// UI tests launch with `-uiTesting`: they get the mock service, so they
-    /// never upload to the production API and can drive every Results state
-    /// through the mock-response picker.
-    static let isUITesting = ProcessInfo.processInfo.arguments.contains("-uiTesting")
+    @State private var auth = AuthSession()
 
-    private static var analysisService: any AnalysisService {
-        isUITesting ? MockAnalysisService() : APIAnalysisService()
-    }
+    /// UI tests launch with `-uiTesting`: they get the mock services and an
+    /// in-memory history, so they never touch the production API and can drive
+    /// every Results state through the mock-response picker.
+    static let isUITesting = ProcessInfo.processInfo.arguments.contains("-uiTesting")
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environment(\.analysisService, Self.analysisService)
-                .tint(.brand)
+            Group {
+                if auth.isSignedIn {
+                    RootView()
+                } else {
+                    LoginView()
+                }
+            }
+            .environment(auth)
+            .tint(.brand)
+            .environment(
+                \.analysisService,
+                APIConfig.usesMockServices
+                    ? MockAnalysisService() as any AnalysisService : APIAnalysisService()
+            )
+            .environment(
+                \.authService,
+                APIConfig.usesMockServices
+                    ? MockAuthService() as any AuthService : APIAuthService()
+            )
         }
     }
 }
