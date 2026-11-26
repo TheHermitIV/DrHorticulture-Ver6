@@ -1,7 +1,11 @@
 // Confidence metadata belongs to the model that produced it. Legacy models have none.
+export function isCalibratedModelVersion(version) {
+  return version === 'LeafSegmenter v1.2.0' || version === 'LeafSegmenter v1.3.0';
+}
+
 export function hasDemoCalibration(response) {
   return (
-    response.model_version === 'LeafSegmenter v1.2.0' &&
+    isCalibratedModelVersion(response.model_version) &&
     response.calibration?.method === 'provisional-v2'
   );
 }

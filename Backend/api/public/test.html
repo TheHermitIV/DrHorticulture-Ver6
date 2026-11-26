@@ -21,7 +21,8 @@
       <div class="intro">
         <div>
           <h1>Analyze a plant photo<span>.</span></h1>
-          <p>Get an estimated NDVI reading from a photo of one plant.</p>
+          <p>Experimental RGB-based NDVI estimate from a photo of one plant.</p>
+          <p class="hint">Fertilizer guidance is provisional and may be withheld.</p>
         </div>
       </div>
       <div class="scan-layout">
@@ -48,8 +49,11 @@
         <section class="panel scan-panel" aria-labelledby="result-title">
           <h2 id="result-title">Scan result</h2>
           <p id="status" role="status" aria-live="polite">Choose a photo to begin.</p>
+          <p id="model-version" class="hint" aria-live="polite">
+            Model version appears after analysis.
+          </p>
           <div id="scan-result" hidden>
-            <p class="reading-label">Estimated NDVI</p>
+            <p class="reading-label">Experimental RGB-based NDVI estimate</p>
             <output id="ndvi" class="reading"></output>
             <p id="advice"></p>
             <dl id="demo-scores" class="facts" hidden></dl>

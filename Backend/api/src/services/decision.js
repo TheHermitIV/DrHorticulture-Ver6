@@ -10,7 +10,11 @@
 // plus the 422 details for a rejection.
 
 import { lightingRejection } from './qualityGate.js';
-import { demoCalibration, hasDemoCalibration } from './demoCalibration.js';
+import {
+  demoCalibration,
+  hasDemoCalibration,
+  isCalibratedModelVersion,
+} from './demoCalibration.js';
 
 const reject = (reason) => ({ status: 'rejected', recommendation: null, reason });
 const abstain = (reason) => ({ status: 'abstained', recommendation: 'abstain', reason });
@@ -35,7 +39,7 @@ export function decide(response, cfg, imageMetrics) {
     if (reason) return reject(reason);
   }
   const distance = demoNdviDistance(response, cfg);
-  if (response.model_version === 'LeafSegmenter v1.2.0' && distance == null) {
+  if (isCalibratedModelVersion(response.model_version) && distance == null) {
     return abstain(hasDemoCalibration(response) ? 'demo_not_enabled' : 'uncertainty_unavailable');
   }
   const maskMinimum = distance == null ? cfg.mask_min : cfg.quality.demo_mask_quality_min;
