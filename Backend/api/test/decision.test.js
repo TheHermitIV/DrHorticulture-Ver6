@@ -50,6 +50,21 @@ describe('decide', () => {
       demo_ndvi_buffer: 0.11,
     },
   };
+  it('uses v1.3 uncertainty and fails closed when the paired calibration is missing', () => {
+    const body = { ...calibrated({ ndvi: 0.8 }), model_version: 'LeafSegmenter v1.3.0' };
+    expect(decide(body, demo)).toEqual(completed('do_not_fertilize'));
+    expect(demoCalibration(body, demo).ndvi_radius).toBe(0.195);
+    expect(decide(body, cfg)).toEqual(abstained('demo_not_enabled'));
+    expect(decide({ ...body, calibration: undefined }, demo)).toEqual(
+      abstained('uncertainty_unavailable'),
+    );
+    expect(
+      decide({ ...body, segmentation: { ...body.segmentation, mask_confidence: 0.79 } }, demo),
+    ).toEqual(abstained('low_mask_confidence'));
+    expect(decide({ ...body, estimate: { ...body.estimate, ndvi: 0.51 } }, demo)).toEqual(
+      abstained('near_ndvi_cutoff'),
+    );
+  });
   it('stores uncertainty from the same model and honors the configured minimum buffer', () => {
     expect(demoCalibration(calibrated({ ndvi: 0.8 }), demo)).toMatchObject({
       method: 'provisional-v2',

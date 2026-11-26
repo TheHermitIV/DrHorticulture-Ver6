@@ -2,7 +2,7 @@
 
 Ernesto can review and integrate `leaf-segmenter-demo` to update the existing
 Railway services. The iPhone continues to use the existing public API URL.
-LeafSegmenter v1.2.0 uses the same leaf mask model, a retrained NDVI estimator, and fitted confidence models.
+LeafSegmenter v1.3.0 uses the corrected-review leaf mask candidate, a newly fitted NDVI estimator, and refitted confidence models.
 
 For an existing installation with leaf lighting and stored masks already working,
 start at [Update Railway for provisional calibration](#7-update-railway-for-provisional-calibration).
@@ -28,7 +28,7 @@ if you need to roll back.
 
 ## 2. Check the model settings
 
-The model file, `Backend/inference/weights/leaf-segmenter-v1.2.0.json`, ships in the repo
+The model file, `Backend/inference/weights/leaf-segmenter-v1.3.0.json`, ships in the repo
 and is copied into the image, so no volume or upload is needed. On the inference
 service, make sure `LEAF_SEGMENTER_ENABLED` is unset or `true` (the Docker image
 defaults to `true`) and that `LEAF_SEGMENTER_MODEL_PATH` is unset. Set that
@@ -37,9 +37,10 @@ variable only to override the bundled model with a file on a mounted volume.
 ## 3. Deploy and verify
 
 1. Integrate the branch through the team's review and merge workflow. Deploy
-   **inference first**, then deploy the **API** from the integrated revision.
+   the **API before or with inference** from the integrated revision so v1.3.0
+   receives interval-based demo gating.
    The inference `/health` should return
-   `{"status":"ok","model_version":"LeafSegmenter v1.2.0"}`. If inference is
+   `{"status":"ok","model_version":"LeafSegmenter v1.3.0"}`. If inference is
    private, check it from inside the Railway environment. The public API's
    `/health` should report `db: "ok"` and `inference_mode: "remote"`.
 2. Apply the quality configuration in the next section before testing the
@@ -49,9 +50,9 @@ variable only to override the bundled model with a file on a mounted volume.
    to target a test API. The website is a local preview and the mask creator runs
    in the browser. Submit a clear, centered plant photo.
    Before enabling the experimental demo rules, expect **Estimated NDVI**
-   alongside **No fertilizer recommendation** for LeafSegmenter v1.2.0.
+   alongside **No fertilizer recommendation** for LeafSegmenter v1.3.0.
 4. In Supabase, find the test scan's row in `analyses`. Check that
-   `model_version` is `LeafSegmenter v1.2.0` and `ndvi` matches the phone up to
+   `model_version` is `LeafSegmenter v1.3.0` and `ndvi` matches the phone up to
    rounding. Confirm that **Scan Details** opens the scan and shows the model
    version and quality checks. Smoke-test the same flow on the iPhone if it will
    be used in the demo.
@@ -129,20 +130,20 @@ of the failure.
    Autodeploy from `main` starts the deployments when the merge is pushed.
 2. Keep the existing API URL, inference URL, and matching `INFERENCE_API_KEY`.
    Confirm `INFERENCE_MODE=remote`. Leave `LEAF_SEGMENTER_MODEL_PATH` unset so
-   inference loads the bundled v1.2.0 file.
-3. Confirm inference `/health` reports `LeafSegmenter v1.2.0` and API `/health`
+   inference loads the bundled v1.3.0 file.
+3. Confirm inference `/health` reports `LeafSegmenter v1.3.0` and API `/health`
    reports `db: ok` and `inference_mode: remote`.
 4. Run the activation SQL in section 7 in the API's Supabase project. Wait up
-   to 60 seconds for the configuration cache. Before activation, v1.2.0 returns
+   to 60 seconds for the configuration cache. Before activation, v1.3.0 returns
    an NDVI estimate with `demo_not_enabled`.
 5. Pull main locally, run `npm run test-page`, submit fresh plant photos, and
    inspect Scan Details using the checks below. Rebuild the iPhone app for
    the new abstention explanations.
 
-This release keeps the segmentation trees and retrains the NDVI estimator on
-118 plants, with the leaf-coverage coefficient set to zero. The new mask-quality
-predictor and adaptive NDVI uncertainty are bundled in the same v1.2.0 file.
-The improved segmentation experiment remains separate.
+This release adopts the corrected-review segmentation candidate and refits the
+NDVI estimator on 118 plants, with the leaf-coverage coefficient set to zero.
+Refitted mask-quality and adaptive NDVI uncertainty models are bundled in the
+same v1.3.0 file. See the training handoff for the measured tradeoffs.
 
 ## 7. Update Railway for provisional calibration
 
@@ -152,15 +153,16 @@ The improved segmentation experiment remains separate.
    Keep it if already applied. Scan reads support snapshots in its old columns.
 2. Merge or deploy the calibration revision. In Railway **Deployments**, confirm
    that both **inference** and **API** are running the intended Git commit. With
-   manual deployments, start with inference. Inference `/health` should say
-   `LeafSegmenter v1.2.0`. A fresh public scan response should include
+   manual deployments, update the API before or with inference so it recognizes
+   v1.3.0 and applies its uncertainty rules. Inference `/health` should say
+   `LeafSegmenter v1.3.0`. A fresh public scan response should include
    `result.demo_calibration.method = provisional-v2`. Verify
    the deployed commit and submit a fresh scan. Confirm the API `/health` reports a working database and remote
    inference, then scan a clear photo and check that Scan Details shows a leaf mask score.
 3. Enable the experimental rules in the database used by the demo API with the
-   SQL below. The rules are opt-in and apply to new scans on v1.2.0. If the demo
+   SQL below. The rules are opt-in and apply to new scans on v1.3.0. If the demo
    uses the production API and database, activating this row also affects other
-   new v1.2.0 scans on that API. Allow up to 60 seconds for the config cache to refresh.
+   new v1.3.0 scans on that API. Allow up to 60 seconds for the config cache to refresh.
 
 ```sql
 begin;

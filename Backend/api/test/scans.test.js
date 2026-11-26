@@ -37,11 +37,16 @@ const metrics = {
 const mockBody = { ...mockExample(), model_version: 'mock-0.1' };
 
 describe('POST /api/v1/scans', () => {
-  it.each([true, false])(
-    'persists and retrieves v1.2 confidence with demo enabled = %s',
-    async (enabled) => {
+  it.each([
+    ['LeafSegmenter v1.2.0', true],
+    ['LeafSegmenter v1.2.0', false],
+    ['LeafSegmenter v1.3.0', true],
+    ['LeafSegmenter v1.3.0', false],
+  ])(
+    'persists and retrieves %s confidence with demo enabled = %s',
+    async (modelVersion, enabled) => {
       const body = mockExample();
-      body.model_version = 'LeafSegmenter v1.2.0';
+      body.model_version = modelVersion;
       body.estimate.ndvi = 0.8;
       body.estimate.confidence = 0.63;
       body.calibration = {
