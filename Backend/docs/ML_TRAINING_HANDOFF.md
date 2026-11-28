@@ -2,16 +2,60 @@
 
 ## LeafSegmenter
 
-The inference Docker image defaults to **LeafSegmenter v1.2.0** and its paired NDVI estimator.
+The inference Docker image defaults to **LeafSegmenter v1.3.0** and its paired NDVI estimator.
 Follow the [Railway deployment runbook](RAILWAY_DEPLOYMENT.md) for the rollout and smoke test.
-The default artifact ships in the repo at `Backend/inference/weights/leaf-segmenter-v1.2.0.json`
+The default artifact ships in the repo at `Backend/inference/weights/leaf-segmenter-v1.3.0.json`
 and is copied into the image. To ship a new version, replace that file (and its `.gitignore` and
 `.dockerignore` exceptions if the name changes), or point `LEAF_SEGMENTER_MODEL_PATH` at a file on a mount.
 `GET /health` reports the loaded version. The API stores model-specific confidence snapshots. Experimental advice requires
 the opt-in settings described in the runbook and a mask and NDVI interval that
 both pass. Confidence remains provisional on the small development collections.
 
-### Data and release status after corrected reviews
+### v1.3.0 corrected-mask release (20 November 2026)
+
+This release adopts the selected corrected-review segmenter: 41 training plants,
+4 validation plants and 11 reserved mask tests. The segmentation trees match the
+previously previewed `corrected_run/selected-segmenter.json` candidate. This is
+new segmentation training, not just a version rename. The original v1.2.0 bundle
+is retained for rollback.
+
+The paired NDVI ridge model is refitted on the same 118 training plants using
+features from the newer masks, with zero weight on leaf coverage. The 17 interval
+calibration plants and 22 NDVI test plants remain separate. No test labels are
+used to fit coefficients, error scale, or calibration residuals.
+
+Mask-quality fitting uses 5-fold excluded-plant segmentation predictions for the
+41 mask training plants plus predictions on the 4 validation plants. The quality
+logistic model and Platt calibration use cross-validation, followed by testing on
+11 reserved reviewed masks. Old confidence coefficients are not reused.
+
+| Development metric | v1.2.0 | v1.3.0 |
+| --- | --- | --- |
+| Mean reviewed mask IoU (11 plants) | 0.542 | 0.671 |
+| Masks reaching IoU >= 0.70 | 3/11 | 7/11 |
+| Mask-confidence Brier score (lower is better) | 0.106 | 0.208 |
+| Masks passing 0.80 confidence | 2 (1 adequate) | 4 (4 adequate) |
+| NDVI MAE, older 15 plants | 0.0627 | 0.0690 |
+| NDVI MAE, Daniel 7 plants | 0.0682 | 0.0814 |
+| NDVI MAE, all 22 plants | 0.0644 | 0.0729 |
+| Nominal 90% interval coverage | 21/22 | 20/22 |
+| Mean model interval radius | 0.178 | 0.191 |
+
+This is a deliberate preference for better leaf masks, with a small NDVI error
+increase and worse aggregate confidence Brier score. Four adequate passing masks
+are too few to establish reliable confidence or fertilizer accuracy. Pots, soil
+and neighboring plants remain failure cases. These are previously inspected
+development collections, not fresh blind validation results. Demo thresholds stay
+at mask quality 0.80 and minimum NDVI buffer 0.11; they were not lowered to create
+more recommendations.
+
+The artifact includes model-specific provenance. Its SHA-256 and private training
+outputs can be checked against the local `v1_3_release` experiment. To roll back,
+set `LEAF_SEGMENTER_MODEL_PATH` to the bundled v1.2.0 file; the API supports both
+versions and keeps old scan labels intact. Deploy the updated API before or with
+the new inference image so the new version receives interval-based demo gating.
+
+### Data inventory and v1.2.0 benchmark
 
 There are **157 paired GreenSeeker plants**: 122 from the earlier collections and
 35 from Daniel's new session. The latter has 36 main photos, with 24a/24b sharing
@@ -37,7 +81,7 @@ segmenter and fits NDVI on 118 plants with the leaf-coverage coefficient set to 
 | New Daniel session | 7 | 0.1605 | 0.0682 |
 | Combined | 22 | 0.0836 | 0.0644 |
 
-The current confidence release uses eight mask diagnostics, including threshold
+The v1.2.0 confidence release uses eight mask diagnostics, including threshold
 stability, fragmentation, foreground scores, and foreground position. A regularized
 logistic model fits 45 examples. The original 25 use excluded-plant segmentation
 predictions, and 20 newly reviewed examples are separate from segmenter training.

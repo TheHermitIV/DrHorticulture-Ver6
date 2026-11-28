@@ -7,7 +7,7 @@ The app is a SwiftUI iOS client backed by a Node API and a Python inference serv
 every product rule (quality gate, thresholds, decision). The inference service turns an image into
 raw numbers and never decides, writes, or sees Supabase keys.
 
-> The inference Docker image defaults to LeafSegmenter v1.2.0 with its paired NDVI estimator.
+> The inference Docker image defaults to LeafSegmenter v1.3.0 with the corrected-review mask model, refitted NDVI estimator, and matching provisional confidence models.
 > The model file ships in `Backend/inference/weights/`. See the
 > [training handoff](Backend/docs/ML_TRAINING_HANDOFF.md) for retraining and evaluation.
 
@@ -92,14 +92,19 @@ Set `INFERENCE_MODE=remote` plus `INFERENCE_URL` and `INFERENCE_API_KEY` to use 
 ```bash
 cd Backend/inference
 python -m venv .venv
-.venv/bin/pip install -r requirements-dev.txt -e ../plantvision
-cp .env.example .env          # set INFERENCE_API_KEY (16+ chars), MODEL_VERSION, CV_ENGINE
-.venv/bin/gunicorn -b 127.0.0.1:8000 --workers 1 --threads 4 app:app
+.venv/bin/pip install -r requirements-dev.txt opencv-python-headless==5.0.0.93 -e ../plantvision
+export INFERENCE_API_KEY='replace-with-the-same-shared-key-used-by-the-api'
+export LEAF_SEGMENTER_ENABLED=true
+.venv/bin/python -m flask --app app run --host 127.0.0.1 --port 8000
 ```
 
-Use `CV_ENGINE=stub` (default) for hardcoded, torch-free responses. Use `CV_ENGINE=plantvision`
-for the real CV stack; install `requirements-cv.txt` and set `MODEL_VERSION`/`ML_WEIGHTS_PATH` to
-serve a trained NDVI bundle.
+For local LeafSegmenter inference, install `opencv-python-headless`, set
+`LEAF_SEGMENTER_ENABLED=true` and `INFERENCE_API_KEY` in the process environment,
+then run `python -m flask --app app run --host 127.0.0.1 --port 8000` (including
+on Windows). `app.py` does not load `.env` automatically. The Docker image enables
+LeafSegmenter by default and uses Gunicorn. Leave `LEAF_SEGMENTER_MODEL_PATH`
+unset to load the bundled v1.3.0 file. `CV_ENGINE` and `ML_WEIGHTS_PATH` apply to
+the separate legacy path when LeafSegmenter is disabled.
 
 ### 3. PlantVision (CV prototype)
 
@@ -135,68 +140,35 @@ python -m pytest
 
 CI runs the same suites on every push to `Backend`/`main` and every PR to `main`.
 
-## NDVI model handoff (what this branch adds)
+## Models and current evaluation
 
-The NDVI model is the only piece still waiting on data. This branch makes the handoff mechanical:
-a teammate supplies labeled photos, and an agent (or a person) runs one pipeline to produce the
-bundle the service loads.
+The selected bundled release is **LeafSegmenter v1.3.0**: corrected-review
+segmentation, a ridge NDVI estimator, and refitted provisional confidence models.
+The NDVI split is 118 training, 17 calibration and 22 test plants. On the existing
+22-plant development test set, MAE is **0.0729 NDVI units**, with **17/22** within
+±0.10 and nominal 90% intervals covering **20/22** readings. Mean mask IoU on 11
+reserved reviewed masks is **0.671**, compared with 0.542 for the older segmenter.
+Mask quality improved while NDVI MAE increased from v1.2.0's 0.0644. These are
+previously inspected development collections, not fresh blind validation or
+fertilizer-effectiveness results. Species auto-detection is not active.
 
-### What an agent will do
+See [training and data provenance](Backend/docs/ML_TRAINING_HANDOFF.md) for counts,
+training exclusions, confidence limitations and retraining. The legacy ensemble
+pipeline remains development code; it is not the default LeafSegmenter serving path.
 
-1. Read [`Backend/docs/ML_TRAINING_HANDOFF.md`](Backend/docs/ML_TRAINING_HANDOFF.md).
-2. Put photos in `Backend/plantvision/data/raw/` and a labels CSV in
-   `Backend/plantvision/data/labels/labels.csv`.
-3. Run `python -m training.ndvi.pipeline --images … --labels … --dry-run` and fix any data
-   problems the report names.
-4. Run the full pipeline to extract features through the serving CV path, fit the ensemble, fit
-   the optional greenness adjustment on held-out residuals, and write `model.json`,
-   `metrics.json`, and `manifest.json` into `Backend/inference/weights/`.
-5. Confirm `pytest tests/integration/test_training_roundtrip.py -v` passes, then report held-out
-   MAE/RMSE and whether the adjustment improved them.
-6. Set `MODEL_VERSION` and `ML_WEIGHTS_PATH` in the inference environment and deploy.
+## Demo rehearsal
 
-The agent must **not** change the HTTP contract, `api/src/services/decision.js`, or the response
-shape in `inference/app.py`. If a contract or seam must change, update
-`Backend/docs/BACKEND_SPEC.md` and add a change-log row in the same commit.
+Start the preview with `npm run test-page`. It forwards scans to the deployed
+Railway API by default, even when the browser URL is localhost. To use a test
+backend, run `npm run test-page -- --api http://localhost:4000 --port 3001`.
+The model label after analysis comes from the actual server response, not from
+the local weights file. Old saved scans retain their original model version.
 
-### Train and export
-
-```bash
-cd Backend/plantvision
-pip install -e ".[ml,dev]"
-
-# 1. Validate the labels and images only (no models load)
-python -m training.ndvi.pipeline --images data/raw --labels data/labels/labels.csv --dry-run
-
-# 2. Extract + train + evaluate + write the bundle
-python -m training.ndvi.pipeline \
-  --images data/raw --labels data/labels/labels.csv \
-  --out ../inference/weights --model-version ridge-feat-0.1
-
-# 3. Optional: evaluate a bundle against a features.csv
-python -m training.ndvi.evaluate \
-  --features data/features/features.csv --model ../inference/weights/model.json
-```
-
-### Labels schema
-
-| Column | Rules |
-| --- | --- |
-| `image` | File name under `--images` (extension optional) |
-| `plant_id` | Group key; the same plant must not span train and test |
-| `species` | Labeled species (provenance/analysis) |
-| `greenseeker_ndvi` | Target in `[-1, 1]`; GreenSeeker ground truth is `0.00–0.99` |
-
-### What the model is
-
-At hundreds of labeled images, the representation is the CV **color features** (ExG,
-green_ratio, channel stats, leaf fraction, …) plus the pretrained **species probability
-distribution**. Bootstrap ridge heads predict NDVI; their spread becomes `confidence`. An
-optional greenness adjustment is fitted on held-out residuals and ships only if it improves MAE.
-A frozen-backbone embedding is deliberately deferred.
-
-The bundle format lives in [`Backend/inference/ml/bundle.py`](Backend/inference/ml/bundle.py);
-training writes it, inference loads it. One format, no drift.
+The last live smoke test on 25 November 2026 used a held-out plant measured at
+0.830 and returned 0.792 from **v1.1.0**, with no recommendation because that
+version lacks calibrated NDVI confidence. That live result does not verify a
+v1.3.0 deployment. Follow [the deployment guide](Backend/docs/RAILWAY_DEPLOYMENT.md)
+and [the final Showcase checklist](Backend/docs/SHOWCASE_CLEARANCE.md).
 
 ## Configuration
 
@@ -204,8 +176,8 @@ training writes it, inference loads it. One format, no drift.
   active `decision_config` row, never from code or env vars.
 - API environment: [`Backend/api/.env.example`](Backend/api/.env.example).
 - Inference environment: [`Backend/inference/.env.example`](Backend/inference/.env.example);
-  `ML_WEIGHTS_PATH` unset means stub values, and a non-stub `MODEL_VERSION` without weights fails
-  fast at startup.
+  LeafSegmenter loads its bundled JSON by default in Docker. `ML_WEIGHTS_PATH` and
+  non-stub `MODEL_VERSION` apply only to the legacy path when LeafSegmenter is disabled.
 - Weights over ~50 MB go in the `model-weights` bucket per the spec; inference never gets the
   Supabase service-role key.
 
@@ -218,6 +190,26 @@ deploy the services and verify a scan.
 - `inference` deploys as a separate Railway service using `Backend/inference/railway.json` and a
   Dockerfile built from the repo root. It defaults to LeafSegmenter, whose model file ships in the image.
 - The iOS app is built and uploaded to TestFlight by `.github/workflows/ios.yml` on `main`.
+
+## AI assistance disclosure
+
+We used **OpenAI Codex / ChatGPT** and **Anthropic Claude / Claude Code** during development
+for coding, debugging, interface improvements, research summaries, model-training experiments,
+data analysis, and documentation.
+
+The team remains responsible for the submitted code, research claims, and reported results.
+We review AI-assisted work through code inspection, automated tests, source checks, and visual
+comparisons of predicted masks with photos and human-reviewed annotations. Model estimates are
+also evaluated against measured GreenSeeker readings. We corrected misleading descriptions of
+model updates and documented cases where better segmentation increased NDVI prediction error.
+Software tests and confidence scores alone do not establish model accuracy or fertilizer validity.
+
+## Credits and public display
+
+See [component credits and data permissions](THIRD_PARTY_NOTICES.md) for the
+software, services and source data used. Public photo permissions, app-icon
+origin, written Product Owner approval, final slide credits, and a full demo
+accessibility rehearsal remain tracked in [Showcase clearance](Backend/docs/SHOWCASE_CLEARANCE.md).
 
 ## Further reading
 

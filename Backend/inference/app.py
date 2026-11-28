@@ -189,7 +189,7 @@ def create_app(api_key=None, model_version=None, fetch_image=download_image):
         from plantvision.segmentation.leaf import LeafSegmenter
 
         weights_path = os.environ.get("LEAF_SEGMENTER_MODEL_PATH") or (
-            Path(__file__).with_name("weights") / "leaf-segmenter-v1.2.0.json"
+            Path(__file__).with_name("weights") / "leaf-segmenter-v1.3.0.json"
         )
         model = LeafSegmenter(weights_path)
         analyze_image = with_mask(model)

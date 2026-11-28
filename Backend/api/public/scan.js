@@ -65,6 +65,13 @@ function initializeUpload(form) {
     showPreview(state.photo);
     clearResult();
     const { submission, scanId, photo } = state;
+    const modelVersion =
+      submission?.body.result?.model_version ?? submission?.body.diagnostics?.model_version;
+    element('model-version').textContent = modelVersion
+      ? `Model used in this scan: ${modelVersion}`
+      : submission && !submission.ok
+        ? 'Model version unavailable. See the scan details for the rejection or service error.'
+        : 'Model version appears after analysis.';
     submit.disabled = !photo;
     setRetake(state.retakeId);
     startNew.hidden = !photo && !scanId;
@@ -395,7 +402,7 @@ function initializeLookup(form) {
         ['Estimated NDVI', result ? (ndvi(result.ndvi) ?? 'Unavailable') : null],
         ['Recommendation', recommendationLabel(result)],
         [
-          modelVersion === 'LeafSegmenter v1.2.0'
+          ['LeafSegmenter v1.2.0', 'LeafSegmenter v1.3.0'].includes(modelVersion)
             ? 'Reference support within ±0.100 NDVI'
             : 'Model confidence',
           result?.ndvi_cutoff_distance == null &&
@@ -406,7 +413,9 @@ function initializeLookup(form) {
         ['Distance from demo NDVI cutoff', ndvi(result?.ndvi_cutoff_distance)],
         ...calibrationFacts(result),
         [
-          modelVersion === 'LeafSegmenter v1.2.0' ? 'Mask quality confidence' : 'Leaf mask score',
+          ['LeafSegmenter v1.2.0', 'LeafSegmenter v1.3.0'].includes(modelVersion)
+            ? 'Mask quality confidence'
+            : 'Leaf mask score',
           result?.demo_calibration?.method === 'provisional-v2'
             ? null
             : uncalibratedModels.has(modelVersion) && diagnostics?.mask_confidence > 0

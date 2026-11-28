@@ -37,7 +37,7 @@ def test_bundled_model_serves_model_specific_calibration(monkeypatch):
     photo = io.BytesIO()
     Image.fromarray(pixels).save(photo, format="PNG")
     client = app_module.create_app(api_key=API_KEY, fetch_image=lambda _: photo.getvalue()).test_client()
-    assert client.get("/health").json["model_version"] == "LeafSegmenter v1.2.0"
+    assert client.get("/health").json["model_version"] == "LeafSegmenter v1.3.0"
     response = client.post("/v1/analyze", json=analyze_body(), headers={"x-inference-key": API_KEY})
     assert response.status_code == 200
     body = response.json
