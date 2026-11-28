@@ -61,6 +61,15 @@ function storeRecords(records) {
     tx.onabort = () => reject(tx.error);
   });
 }
+function deleteRecords(ids) {
+  if (!database) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const tx = database.transaction('photos', 'readwrite');
+    for (const id of ids) tx.objectStore('photos').delete(id);
+    tx.oncomplete = resolve;
+    tx.onabort = () => reject(tx.error);
+  });
+}
 function readRecords() {
   return new Promise((resolve, reject) => {
     const request = database.transaction('photos').objectStore('photos').getAll();
@@ -149,9 +158,18 @@ async function practice() {
     practice: true,
   };
 }
+// Accepted photos leave the queue but stay in storage until the dataset download takes them.
+const isAccepted = (item) => item.annotation?.status === 'accepted';
+const queued = () => items.filter((item) => !isAccepted(item));
+// The next photo to work on after one leaves the queue, else the practice plant.
+const nextItem = () => queued().find((item) => !item.practice) ?? items[0];
+const binIcon =
+  '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>';
 function queue() {
   $('queue').replaceChildren();
-  for (const item of items) {
+  for (const item of queued()) {
+    const row = document.createElement('div');
+    row.className = 'queue-row';
     const button = document.createElement('button');
     button.className = 'queue-item';
     button.textContent = item.name;
@@ -160,10 +178,20 @@ function queue() {
     detail.textContent = item.practice ? 'Practice only' : item.annotation?.status || 'New';
     button.append(detail);
     button.onclick = () => run(() => open(item));
-    $('queue').append(button);
+    row.append(button);
+    if (!item.practice) {
+      const bin = document.createElement('button');
+      bin.className = 'queue-delete';
+      bin.title = `Delete ${item.name}`;
+      bin.setAttribute('aria-label', `Delete ${item.name}`);
+      bin.innerHTML = binIcon;
+      bin.onclick = () => run(() => remove(item));
+      row.append(bin);
+    }
+    $('queue').append(row);
   }
-  const accepted = items.filter((item) => item.annotation?.status === 'accepted').length;
-  $('count').textContent = String(items.filter((item) => !item.practice).length);
+  const accepted = items.filter(isAccepted).length;
+  $('count').textContent = String(queued().filter((item) => !item.practice).length);
   $('export').disabled = accepted === 0;
   $('export').textContent = accepted ? `↓ Download dataset (${accepted})` : '↓ Download dataset';
 }
@@ -454,13 +482,25 @@ async function save(accept) {
   items[items.findIndex((item) => item.id === record.id)] = record;
   active = record;
   dirty = false;
+  if (accept) {
+    await open(nextItem());
+    status(`Mask accepted for ${record.name}. It is waiting in Download dataset.`);
+    return;
+  }
   $('badge').textContent = record.annotation.status;
   queue();
-  status(
-    accept
-      ? 'Mask accepted. It is ready for dataset export.'
-      : 'Draft saved. Only accepted masks are exported.',
-  );
+  status('Draft saved. Only accepted masks are exported.');
+}
+async function remove(item) {
+  const unsaved = dirty && active?.id === item.id ? ' Its unsaved changes will be lost.' : '';
+  if (!confirm(`Delete “${item.name}” from this browser?${unsaved} This cannot be undone.`)) return;
+  await deleteRecords([item.id]);
+  items = items.filter((other) => other.id !== item.id);
+  if (active?.id === item.id) {
+    dirty = false;
+    await open(nextItem());
+  } else queue();
+  status(`Deleted ${item.name}.`);
 }
 async function exportData() {
   if (dirty) throw new Error('Save or accept the current edits before downloading the dataset.');
@@ -478,9 +518,22 @@ async function exportData() {
       ],
     );
   download(await makeZip(files), `leaf-training-${new Date().toISOString().slice(0, 10)}.zip`);
-  status(
-    `Downloaded ${accepted.length} accepted mask${accepted.length === 1 ? '' : 's'} and training manifest.`,
-  );
+  const masks = `${accepted.length} accepted mask${accepted.length === 1 ? '' : 's'}`;
+  const them = accepted.length === 1 ? 'it' : 'them';
+  status(`Downloaded ${masks} and training manifest.`);
+  // Accepted photos have no queue row, so this is the only place they leave the browser.
+  if (
+    !confirm(
+      `Once the ZIP has saved, remove the ${masks} from this browser? ` +
+        `Choose Cancel to keep ${them} for another download.`,
+    )
+  )
+    return;
+  const exported = new Set(accepted.map((item) => item.id));
+  await deleteRecords(exported);
+  items = items.filter((item) => !exported.has(item.id));
+  queue();
+  status(`Downloaded ${masks} and removed ${them} from this browser.`);
 }
 async function run(action) {
   if (busy) return;
@@ -561,7 +614,7 @@ async function init() {
     );
   }
   items = [await practice(), ...saved];
-  await open(saved[0] || items[0]);
+  await open(nextItem());
   route();
 }
 init().catch((error) => status(error.message, true));

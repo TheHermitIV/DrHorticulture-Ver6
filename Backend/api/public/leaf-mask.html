@@ -48,7 +48,10 @@
               <span class="count" id="count">0</span>
             </div>
             <div id="queue"></div>
-            <div class="queue-foot">Training photos and drafts are saved in this browser.</div>
+            <div class="queue-foot">
+              Photos and drafts are saved in this browser. Accepted masks leave the queue and wait
+              in Download dataset.
+            </div>
           </aside>
           <section class="panel workbench" aria-label="Mask editor">
             <div class="panel-head">
@@ -229,8 +232,13 @@
             </p>
             <p>
               <strong>Save draft</strong> keeps unfinished work in this browser.
-              <strong>Accept reviewed mask</strong> marks a completed mask for export. After
-              changing an accepted mask, review and accept it again before exporting.
+              <strong>Accept reviewed mask</strong> marks a completed mask for export, removes the
+              photo from the queue, and opens the next one. Check the mask before accepting: an
+              accepted photo can’t be reopened.
+            </p>
+            <p>
+              Select the bin icon next to a photo in the queue to delete it and its mask from this
+              browser.
             </p>
           </article>
           <article class="panel guide-card">
@@ -239,7 +247,8 @@
             <p>
               <strong>Download mask PNG</strong> saves the current black-and-white mask.
               <strong>Download dataset</strong> exports only accepted entries in a ZIP with the
-              JPEGs, masks, review records, and training manifest.
+              JPEGs, masks, review records, and training manifest. Once the ZIP has saved, you can
+              remove the exported photos from this browser, or keep them for another download.
             </p>
             <p>
               Save or accept edits before switching photos. Downloads are how you move work to

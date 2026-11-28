@@ -236,14 +236,34 @@ h2 {
   max-height: 530px;
   overflow: auto;
 }
+.queue-row {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 5px;
+}
 .queue-item {
   display: block;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   text-align: left;
-  margin-bottom: 5px;
   padding: 8px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.queue-delete {
+  display: grid;
+  place-items: center;
+  flex: none;
+  padding: 0 9px;
+  color: var(--muted);
+}
+.queue-delete svg {
+  width: 16px;
+  height: 16px;
+}
+.queue-delete:hover {
+  color: #a3262c;
+  border-color: #e4b6b2;
 }
 .queue-item small {
   display: block;
@@ -625,10 +645,12 @@ footer {
     display: flex;
     max-height: 90px;
   }
-  .queue-item {
-    width: auto;
-    min-width: 115px;
+  .queue-row {
+    flex: none;
     margin: 0 5px 0 0;
+  }
+  .queue-item {
+    min-width: 115px;
   }
   .queue-foot {
     display: none;
